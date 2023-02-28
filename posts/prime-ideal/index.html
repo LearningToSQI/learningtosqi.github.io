@@ -1,0 +1,123 @@
+<!doctype html><html lang=en-us><head><meta charset=utf-8><meta http-equiv=x-ua-compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1"><meta name=format-detection content="telephone=no"><meta name=description content="The first step of the KLPT algorithm is to find an ideal $L$ equivalent to the input ideal $I$ with prime norm. The naive algorithm to compute equivalent ideals with prime norm is fairly simple, but getting SQISign to work in practice means being very careful with this step.
+Practically, we want an ideal with prime norm, as we will need to perform computations modulo its norm. When it is prime, computations are easy and efficient."><title>Equivalent Prime Norm Ideals</title><meta name=description content="A SageMath implementation of SQISign"><link rel=canonical href=https://learningtosqi.github.io><meta property="og:type" content="website"><meta property="og:title" content="Learning to SQI | Equivalent Prime Norm Ideals"><meta property="og:description" content="A SageMath implementation of SQISign"><meta property="og:url" content="https://learningtosqi.github.io/"><meta property="og:site_name" content="Learning to SQI | Equivalent Prime Norm Ideals"><meta property="og:image" content="/images/banner.png"><meta name=twitter:card content="summary_large_image"><meta name=twitter:title content="Learning to SQI | Equivalent Prime Norm Ideals"><meta name=twitter:description content="A SageMath implementation of SQISign"><meta name=twitter:site content="https://learningtosqi.github.io"><meta name=twitter:image content="/images/banner.png"><link rel=apple-touch-icon sizes=180x180 href=/favicon/apple-touch-icon.png><link rel=icon type=image/png sizes=32x32 href=/favicon/favicon-32x32.png><link rel=icon type=image/png sizes=16x16 href=/favicon/favicon-16x16.png><link rel=manifest href=/favicon/site.webmanifest><link rel=mask-icon href=f/avicon/safari-pinned-tab.svg color=#0017f5><link rel="shortcut icon" href=/favicon/favicon.ico><meta name=msapplication-TileColor content="#00aba9"><meta name=msapplication-config content="/favicon/browserconfig.xml"><meta name=theme-color content="#ffffff"><link rel=preconnect href=https://fonts.googleapis.com><link rel=preconnect href=https://fonts.gstatic.com crossorigin><link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,300;0,500;1,300&display=swap" rel=stylesheet><link rel=stylesheet href=//cdn.jsdelivr.net/npm/hack-font@3.3.0/build/web/hack.css><link rel=stylesheet href=/css/main.7bd2600936685e5cc7c0ae3b91978cfe3727b0609b2e43f94a050f2d2c922dbb5c196ba8242b7233074547a13c912b1bdc9086eca139f9a2f0aab829dd9e605f.css integrity="sha512-e9JgCTZoXlzHwK47kZeM/jcnsGCbLkP5SgUPLSySLbtcGWuoJCtyMwdFR6E8kSsb3JCG7KE5+aLwqrgp3Z5gXw=="><script>MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]],processEscapes:!0,processEnvironments:!0,macros:{phi:"\\varphi",End:"\\textrm{End}",Nrd:"\\textrm{Nrd}",OO:"\\mathcal{O}",BB:"\\mathcal{B}_{p, \\infty}",NN:"\\mathcal{N}",TT:"\\mathcal{T}",ZZ:"\\mathbb{Z}",QQ:"\\mathbb{Q}",FF:"\\mathbb{F}"}},options:{skipHtmlTags:["script","noscript","style","textarea","pre"]}},window.addEventListener("load",e=>{document.querySelectorAll("mjx-container").forEach(function(e){e.parentElement.classList+="has-jax"})})</script><script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+<script id=MathJax-script async src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js></script></head><body a=auto><div class=wrapper><header><h1 class=title-header><a href=/>Learning to SQI</a></h1><h2 class=alt-title>Implementing SQISign in SageMath</h2><div class=authors>Maria Corte-Real Santos,
+Giacomo Pope</div></header><main class=page-content aria-label=Content><div class=flex-wrapper><div class=flex-content><article><h1>Equivalent Prime Norm Ideals</h1><p>The first step of the KLPT algorithm is to find an ideal $L$ equivalent to the input ideal
+$I$ with prime norm. The naive algorithm to compute equivalent ideals with prime norm is
+fairly simple, but getting SQISign to work in practice means being very careful with this step.</p><p>Practically, we want an ideal with prime norm, as we will need to perform computations
+modulo its norm. When it is prime, computations are easy and efficient.</p><p>On this page, we outline how we can naively implement this algorithm and then continue to cover
+the edge cases which appear for SQISign, how they can cause issues and how we can stop these complications
+from becoming a problem.</p><h2 id=computing-equivalent-ideals-with-prime-norm>Computing equivalent ideals with prime norm</h2><p>The trick to finding an ideal $L \sim I$ with prime norm is to first find a <em>good</em> element
+of the quaternion algebra $\BB$ contained in the ideal, namely an element $\alpha \in I$. Every such element has reduced norm
+$\Nrd(\alpha) = N \cdot n(I)$ for some integer $N$. We are interested in the <em>scaled norm</em>:</p><p>$$
+q_{I}(\alpha) = \Nrd(\alpha) / n(I),
+$$</p><p>which corresponds to the norm of the ideal</p><p>$$L = \chi_I(\alpha) = I \frac{\bar{\alpha}}{n(I)}, \quad n(L) = q_I(\alpha),$$</p><p>equivalent to $I$.
+We see that if we can find an element $\alpha \in I$ of prime scaled norm, we can efficiently compute
+an equivalent ideal with prime norm as $\chi_I(\alpha)$.</p><p>We can enumerate elements $\alpha \in I$ by computing a basis $\langle b_0, b_1, b_2, b_3 \rangle$
+of the ideal and looking at linear combinations: $\alpha = \sum c_i b_i$ for $c_i \in \mathbb{Z}$.
+If all we need is an ideal with prime norm,
+then heuristically we can compute random linear combinations and take the scaled norms
+as random integers. A prime norm will be stumbled upon fairly
+quickly.</p><p>For SQISign we impose a further restriction. Not only do we want $L$ to have prime norm, but we need the
+norm to be small as possible. The size of $n(L)$ determines (roughly) the size of the output of KLPT
+itself. The smaller the output of KLPT, the smaller norm ideals we have to work with and ultimately
+the smaller the degree of the isogenies of which we have to compute via the Deuring correspondence.
+For more detailed discussions of
+the norms and KLPT bounds see the page <a href=/posts/klpt-bounds/>Estimating Bounds for KLPT</a>.</p><h2 id=finding-small-algebra-elements>Finding small algebra elements</h2><p>The best we can hope for when looking for algebra elements $\alpha \in I$ with small prime scaled norm is to
+find many elements with small reduced norm and hopefully find one which is prime.</p><p>The first thing we do is compute the Minkowski reduced basis of the given ideal. For an ideal $I$ with maximal
+left-order $\OO$,
+the Minkowski reduced basis $I = \langle \beta_0, \beta_1, \beta_2, \beta_3 \rangle$ satisfies the bound</p><p>$$
+p^2 \leq 16 q_I(\beta_0)q_I(\beta_1)q_I(\beta_2)q_I(\beta_3) \leq 4p^2.
+$$</p><p>We can compute this basis in SageMath with the following snippet:</p><div class=highlight><pre tabindex=0 style=color:#ebdbb2;background-color:#282828;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-py data-lang=py><span style=display:flex><span><span style=color:#fe8019>def</span> <span style=color:#fabd2f>reduced_basis</span>(I):
+</span></span><span style=display:flex><span>    <span style=color:#b8bb26>&#34;&#34;&#34;
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    Computes the Minkowski reduced basis of the
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    input ideal. 
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    &#34;&#34;&#34;</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>def</span> <span style=color:#fabd2f>_matrix_to_gens</span>(M, B):
+</span></span><span style=display:flex><span>        <span style=color:#b8bb26>&#34;&#34;&#34;
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>        Converts from a matrix to generators in the quat.
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>        algebra
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>        &#34;&#34;&#34;</span>
+</span></span><span style=display:flex><span>        <span style=color:#fe8019>return</span> [<span style=color:#fabd2f>sum</span>(c <span style=color:#fe8019>*</span> g <span style=color:#fe8019>for</span> c, g <span style=color:#fe8019>in</span> <span style=color:#fabd2f>zip</span>(row, B)) <span style=color:#fe8019>for</span> row <span style=color:#fe8019>in</span> M]
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    B <span style=color:#fe8019>=</span> I<span style=color:#fe8019>.</span>basis()
+</span></span><span style=display:flex><span>    G <span style=color:#fe8019>=</span> I<span style=color:#fe8019>.</span>gram_matrix()
+</span></span><span style=display:flex><span>    U <span style=color:#fe8019>=</span> G<span style=color:#fe8019>.</span>LLL_gram()<span style=color:#fe8019>.</span>transpose()
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>return</span> _matrix_to_gens(U, B)
+</span></span></code></pre></div><p>Note that the reduced basis of an ideal is the basis of the smallest equivalent ideal to $I$. This means
+that given an ideal $J \sim I$, we would expect to get the same reduced basis elements inputting either $J$ or $I$.
+This will become important later, when we consider what happens when the smallest equivalent ideal has particularly
+small norm.</p><p>Given the basis $\beta_0, \dots, \beta_3$, we can now find small norm elements as above by looking at
+random linear combinations of the basis. If we keep the coefficents $c_i \in \mathbb{Z}$ small, the
+output should be small too. However, we can do a little better than this by enumerating short
+vectors of the lattice corresponding to the reduced basis.</p><p>We implemented this short vector enumeration in <a href=https://github.com/LearningToSQI/SQISign-SageMath/blob/main/lattices.py><code>lattices.py</code></a> in the function <code>generate_small_norm_quat()</code>.
+Essentially, we take the four basis elements and construct a four by four matrix from them. We then use <code>fpylll</code>
+to enumerate short vectors in the corresponding lattice, which we return as elements $\alpha \in \BB$.</p><p>We then iterate through these elements, compute the scaled norm, and simply return the first element whose
+scaled norm is prime.</p><p>For a random input $I$, we expect the basis elements to all be approximately of the size $q_I(\beta_i) \simeq \sqrt{p}$,
+and so when enumerating short vectors of the lattice, we expect to find small solutions approximately this size.</p><p>Most of the time, this is indeed what happens and the algorithm finishes quickly. However, there are certain steps
+in SQISign where we find ourselves in a special case and the norms of the basis elements $\beta_i$ are unbalanced.
+These cases can mean it is very unlikely to small prime norm elements $\alpha \in I$.</p><p><strong>Fool me once&mldr;</strong> Before continuing, we mention one other (easy to solve) complication.
+Sometimes when running KLPT we find a perfectly good $L$ with prime $n(L)$ but something later in the algorithm
+fails and we need to start again by picking a new $L$ with new norm.
+In the repeated run, if we were to deterministically return the first smallest prime norm element from our lattice
+enumeration, we are likely to repeat the remaining steps and encounter the same error over and over again.
+To stop this, we store the prime norms we have discovered from previous runs
+within a set <code>previous</code>. When a prime norm is found, if it is contained within <code>previous</code> we continue enumerating short vectors
+until the next prime is found.</p><h2 id=sometimes-primes-are-hard-to-find>Sometimes primes are hard to find</h2><p>When the norm of the smallest equivalent ideal to $I$ is small, then our LLL reduction inside
+<code>reduced_basis()</code> does <em>too good</em> of a job at finding short vectors and we find two basis elements with very small
+norm which are also usually orthogonal.</p><p>The first problem with finding very small norm basis elements is that the determinant restriction of the Minkowski reduction
+means the remaining two basis elements
+have very large norm. As an example of this, take the unit ideal of $\OO_0$ which has a basis $\langle 1, i, (i + j)/2, (1 + k)/2 \rangle$.
+The basis is already Minkowski reduced, and the elements have norm: $(1, 1, (p+1)/4, (p+1)/4)$.
+Taking random linear combinations would give you elements of norm $\Nrd(\alpha) \simeq p$, far too big for SQISign to run as intended.</p><p>So, why can we not just take random combinations of the first two elements in these cases. The problem here comes from the orthogonality. If we have
+$\beta_1 = i \beta_0$ then we have $\Nrd(\beta_0) = \Nrd(\beta_1)$. We can then compute the reduced norm of a linear combination of these as:
+$\Nrd(c_0\beta_0 + c_1\beta_1) = (c_0^2 + c_1^2)\Nrd(\beta_0)$. Unless we have $\Nrd(\beta_0) = 1$ or one of $c_i = 0$ then the result
+will never be prime.</p><p>There is no magic trick to sorting this problem out directly. There will be ideals where we will be very unlikely to be able to find small prime norm elements of the reduction produces bases like this.
+The tricks we use in SQISign is simply to avoid having to deal with these
+bad ideals by using alternative methods.</p><h3 id=bad-ideals-and-where-to-find-them>Bad ideals and where to find them</h3><p>For random ideals, this problem is very unlikely to happen. However, for SQISign, this problem appears when the input ideal $I$ with left order
+$\OO_0$ and right order $\OO$ connects two elliptic curves which are close on the isogeny graph. Essentially, the closeness of the curves
+means there is a small degree isogeny linking them and via the Deuring correspondence there is some small norm ideal $J \sim I$. This ideal
+has the &ldquo;bad&rdquo; Minkowski reduced basis and causes an issue in our algorithm. This is discussed in much more detail in the page
+<a href=/posts/small-steps/>Small Steps from Curves with Small Endomorphisms</a></p><h2 id=prime-powers>Prime powers</h2><p>One fix we can apply in a few places within SQISign is that there is an ideal $M$ equivalent to the input ideal $I$
+which has norm $\ell^\times$. For our implementation this is always $\ell=2$, a power
+of two.
+As mentioned above, we require the norm to be prime so we can perform arithmetic during later stages of the KLPT algorithm.
+Despite this, although slightly more complicated, we can take $n(M) = \ell^\times$ instead and most steps are unchanged.
+As long as we have $n(M)$ small enough (about $\sqrt{p}$), then we can try and run everything using $N = 2^\times$ and skip
+finding an equivalent prime norm ideal all together.
+This slightly complicates the <code>IdealModConstraint()</code> and <code>StrongApproximationHeuristic()</code> algorithms, but not enough to
+stop this being a good fix.
+Essentially, care has to be taken that certain integers can be inverted mod $2^k$, which essentially just means
+making sure values are odd and finding new values when we know something is going to break.</p><h2 id=heres-one-i-made-earlier>Here&rsquo;s one I made earlier</h2><p>Sometimes it is the case that we are working with some input ideal $I$ which is equivalent to the ideal $I_\tau$ from <code>keygen()</code>,
+which has prime norm $n(I_\tau) \simeq p^{1/4}$.
+When this is the case, we can skip this finding a prime norm ideal and simply set $L = I_\tau$.</p><p>In our implementation, this is used in two places:</p><ul><li>In <code>keygen()</code> the last iteration of <code>IsogenyFromIdealFromKLPT()</code> has as input an ideal equivalent to $J_\tau \sim I_\tau$. By passing
+$I_\tau$ through, we can skip this algorithm for the last call to KLPT, saving us from a bad Ideal.</li><li>In response, we make a call to <code>IsogenyFromIdealCoprime()</code> which in part needs us to run KLPT on the connecting ideal $J_\tau \sim I_\tau$.
+Again, we simply supply $I_\tau$ as an optional argument to the KLPT algorithm and skip computing $L$ for this case.</li></ul><h2 id=prime-norms>&ldquo;Prime&rdquo; norms</h2><p>This last modification not only helps find good algebra elements when the basis is particularly reduced, but also improves the
+efficiency of the algorithm for all steps.</p><p>The ultimate goal of KLPT is to find an ideal $J \sim I$ which has norm dividing some target norm $\mathcal{T}$.
+Following the <a href=https://github.com/SQISign/sqisign>C/Pari implementation</a> of SQISign, we can relax the condition that $N = n(L)$ is prime and instead look for
+$N = L_0 N&rsquo;$ for some prime $N&rsquo;$ and $L_0 \mathrel{|} \mathcal{T}$. Ultimately, we can absorb this new factor $L_0$ in the
+algorithm, perform computations modulo $N&rsquo;$, and return an ideal $J \sim I$ such that $n(J) = L_0 L_1 L_2 \mathrel{|} \mathcal{T}$.</p><p>Although the resulting norm of $J$ will be increased by $L_0$, we dramatically improve the chance of finding elements
+$\alpha \in I$ which are suitable for the algorithm. Concretely, as more $\alpha \in I$ are <em>good</em>, we
+are more likely to be able to pick among the smallest elements generated by the lattice reduction, ensuring $N&rsquo;$ as small as possible.
+Additionally, as composite values can now be accepted, if the norm of the ideal is small enough that we find an orthogonal
+reduced basis, we are much more likely to find a suitable $\alpha \in I$.</p><p>This small section gives an overview of how this works and the implementation is contained within all the functions
+needed for the KLPT algorithm in <a href=https://github.com/LearningToSQI/SQISign-SageMath/blob/main/KLPT.py><code>KLPT.py</code></a>.</p><h3 id=allowing-composite-equivalent-ideals>Allowing composite equivalent ideals</h3><p>Firstly, given a generator $\alpha$ of $L = \OO \langle\alpha, N \rangle$ we can recover a prime norm ideal $L&rsquo; = \OO \alpha + \OO N&rsquo; $.
+Note that although $L&rsquo;$ has prime norm, it will not be equivalent to the input ideal $I$.
+Disregarding this problem for now, we continue through most of the KLPT algorithm as normal to find
+$\beta&rsquo; \in L&rsquo;$ of reduced norm $\Nrd(\beta&rsquo;) = N&rsquo; L_1 L_2$, simply by using $L&rsquo;, N&rsquo;$
+instead of $L, N$ throughout all the steps algorithm.</p><p>However, when $L_0 \neq 1$, our computation will end with some element $\beta&rsquo; \in L&rsquo;$ rather than $\beta \in L \sim I$.
+So, despite having been able to find and work with the prime norm ideal $L&rsquo;$, as it is not equivalent to our input ideal $I$
+we cannot expect the value $J = \chi_L(\beta&rsquo;)$ to be an integral ideal equivalent to the input $I$.</p><p>We correct for this problem at the end of the <code>strong_approximation_wrapper_KLPT()</code>. The goal is to, given $L$, $L&rsquo;$ and $\beta&rsquo; \in L&rsquo;$,
+compute a new element $\beta \in L$ for which $L_0 L_1 L_2 \mathrel{|} \Nrd(\beta)$. Once we have this, we can construct
+an ideal $J$ from $L$ equivalent to $I$ with the correct norm.</p><p>First, compute a generator $\delta$ such that $L = \langle \delta, N \rangle$ with the additional constraint that</p><p>$$
+\gcd(\Nrd(\delta), L_0 L_1 L_2 n(L)^2) = n(L).
+$$</p><p>Given $\delta$, we can then compute $\beta = \delta \bar{\beta}&rsquo;$, which will have reduced norm</p><p>$$\Nrd(\beta) = f N L_1 L_2 = f N&rsquo; L_0 L_1 L_2,$$</p><p>where $f$ is some unimportant cofactor with $\gcd(f, n(L)) = 1$. Now, as $\beta \in L$ by construction, and
+also has $L_0 L_1 L_2$ as a factor of its reduced norm, we can finish the algorithm.
+Given $\OO$, the left-order of $L$, we can compute $J \sim L \sim I$ from</p><p>$$
+J = \OO \beta + \OO L_0 L_1 L_2,
+$$</p><p>and have a good ideal to return from the KLPT algorithm with a relaxed and faster implementation of finding
+equivalent &ldquo;prime&rdquo; norm ideals $L$.</p><p>In our implementation, we use this trick for every call of the KLPT algorithm, with the exception of the <code>SigningKLPT()</code>.
+This is because when we compute our response isogeny, it is vital to control the size of the output ideal $J$
+as it is fixed to ensure security of SQISign.</p><p><a href=#top>Back to Top</a></p></article></div><div class=flex-menu><div class=menu-header-mobile>Contents</div><div class=page-list><div class=menu-header>Contents</div><div class=contents><a href=/>Introduction</a></div><div class=contents><a href=/posts/overview/>Overview</a></div><div class=contents><a href=/posts/cyclic-ideals/>Working with Cyclic Ideals</a></div><div class=contents><a href=/posts/up-to-iso/>Correct up to Isomorphism</a></div><div class=contents><a href=/posts/pushforwards/>Pushforwards and Pullbacks</a></div><div class=contents><a href=/posts/klpt-bounds/>Estimating Bounds for KLPT</a></div><div class=contents><a href=/posts/prime-ideal/>Equivalent Prime Norm Ideals</a></div><div class=contents><a href=/posts/strong-approximation-lattice/>Strong Approximation Lattice Trick</a></div><div class=contents><a href=/posts/ideal-kernel/>Between Kernels and Ideals</a></div><div class=contents><a href=/posts/ideal-to-isogeny/>Computing Isogenies from Ideals</a></div><div class=contents><a href=/posts/ideal-to-isogeny-subroutines/>Subroutines when Computing Isogenies from Ideals</a></div><div class=contents><a href=/posts/meet-in-the-middle/>Meet in the Middle Isogenies</a></div><div class=contents><a href=/posts/small-steps/>Small Steps from Curves with Small Endomorphisms</a></div><div class=contents><a href=/posts/compression/>Modifying Compression</a></div><div class=contents><a href=/posts/future-work/>Future Work</a></div></div></div></div></main></div></body><footer><div class=footer-left><div class=footer-title>Learning to SQI<br><em>Implementing SQISign in SageMath</em></div><div class=footer-authors>Maria Corte-Real Santos,
+Giacomo Pope</div></div><div class=footer-right><a href=https://github.com/jack4818/SQISign-SageMath><img class=social-link alt=GitHub src=/images/github.svg></a></div></footer></html>

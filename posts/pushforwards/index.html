@@ -1,0 +1,192 @@
+<!doctype html><html lang=en-us><head><meta charset=utf-8><meta http-equiv=x-ua-compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1"><meta name=format-detection content="telephone=no"><meta name=description content="Throughout SQISign we are required to perform pushforwards and pullbacks of isogenies, and via the Deuring correspondence, an equivalent mapping for ideals. In this page, we discuss both of these maps, first from the natural perspective of isogenies and then show how we can perform the same mappings directly with the equivalent ideals.
+Pushforwards of isogenies Say we have three elliptic curves $(E_0, E_1, E_2)$ connected by isogenies $\phi_1: E_0 \to E_1$ and $\phi_2 : E_0 \to E_2$ of coprime degree: $\deg(\phi_1) = N_1$, $\deg(\phi_2) = N_2$, $\gcd(N_1,N_2) = 1$."><title>Pushforwards and Pullbacks</title><meta name=description content="A SageMath implementation of SQISign"><link rel=canonical href=https://learningtosqi.github.io><meta property="og:type" content="website"><meta property="og:title" content="Learning to SQI | Pushforwards and Pullbacks"><meta property="og:description" content="A SageMath implementation of SQISign"><meta property="og:url" content="https://learningtosqi.github.io/"><meta property="og:site_name" content="Learning to SQI | Pushforwards and Pullbacks"><meta property="og:image" content="/images/banner.png"><meta name=twitter:card content="summary_large_image"><meta name=twitter:title content="Learning to SQI | Pushforwards and Pullbacks"><meta name=twitter:description content="A SageMath implementation of SQISign"><meta name=twitter:site content="https://learningtosqi.github.io"><meta name=twitter:image content="/images/banner.png"><link rel=apple-touch-icon sizes=180x180 href=/favicon/apple-touch-icon.png><link rel=icon type=image/png sizes=32x32 href=/favicon/favicon-32x32.png><link rel=icon type=image/png sizes=16x16 href=/favicon/favicon-16x16.png><link rel=manifest href=/favicon/site.webmanifest><link rel=mask-icon href=f/avicon/safari-pinned-tab.svg color=#0017f5><link rel="shortcut icon" href=/favicon/favicon.ico><meta name=msapplication-TileColor content="#00aba9"><meta name=msapplication-config content="/favicon/browserconfig.xml"><meta name=theme-color content="#ffffff"><link rel=preconnect href=https://fonts.googleapis.com><link rel=preconnect href=https://fonts.gstatic.com crossorigin><link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,300;0,500;1,300&display=swap" rel=stylesheet><link rel=stylesheet href=//cdn.jsdelivr.net/npm/hack-font@3.3.0/build/web/hack.css><link rel=stylesheet href=/css/main.7bd2600936685e5cc7c0ae3b91978cfe3727b0609b2e43f94a050f2d2c922dbb5c196ba8242b7233074547a13c912b1bdc9086eca139f9a2f0aab829dd9e605f.css integrity="sha512-e9JgCTZoXlzHwK47kZeM/jcnsGCbLkP5SgUPLSySLbtcGWuoJCtyMwdFR6E8kSsb3JCG7KE5+aLwqrgp3Z5gXw=="><script>MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]],processEscapes:!0,processEnvironments:!0,macros:{phi:"\\varphi",End:"\\textrm{End}",Nrd:"\\textrm{Nrd}",OO:"\\mathcal{O}",BB:"\\mathcal{B}_{p, \\infty}",NN:"\\mathcal{N}",TT:"\\mathcal{T}",ZZ:"\\mathbb{Z}",QQ:"\\mathbb{Q}",FF:"\\mathbb{F}"}},options:{skipHtmlTags:["script","noscript","style","textarea","pre"]}},window.addEventListener("load",e=>{document.querySelectorAll("mjx-container").forEach(function(e){e.parentElement.classList+="has-jax"})})</script><script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+<script id=MathJax-script async src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js></script></head><body a=auto><div class=wrapper><header><h1 class=title-header><a href=/>Learning to SQI</a></h1><h2 class=alt-title>Implementing SQISign in SageMath</h2><div class=authors>Maria Corte-Real Santos,
+Giacomo Pope</div></header><main class=page-content aria-label=Content><div class=flex-wrapper><div class=flex-content><article><h1>Pushforwards and Pullbacks</h1><p>Throughout SQISign we are required to perform <em>pushforwards</em> and <em>pullbacks</em> of isogenies, and
+via the Deuring correspondence, an equivalent mapping for ideals.
+In this page, we discuss both of these maps, first from the natural perspective of isogenies and then
+show how we can perform the same mappings directly with the equivalent ideals.</p><h2 id=pushforwards-of-isogenies>Pushforwards of isogenies</h2><p>Say we have three elliptic curves $(E_0, E_1, E_2)$ connected by isogenies $\phi_1: E_0 \to E_1$
+and $\phi_2 : E_0 \to E_2$ of coprime degree: $\deg(\phi_1) = N_1$, $\deg(\phi_2) = N_2$,
+$\gcd(N_1,N_2) = 1$. From this data, we can compute two further isogenies using the <em>pushforward</em> maps:
+$[\phi_1]_\star \phi_2 : E_1 \to E_3$ and $[\phi_2]_\star \phi_1 : E_2 \to E^\prime_3$. As $\phi_1$
+and $\phi_2$ have coprime degree, the codomains of the pushforwards are equivalent up to isomorphism:
+$E_3 \cong E_3^\prime$.</p><p>Practically, the pushforward of isogenies can be computed from the image of the kernel:</p><p>$$
+\rho_j = [\phi_i]_\star \phi_j : E \to E / \langle \phi_i(\ker(\phi_j)) \rangle.
+$$</p><p>Note that we have $\deg(\phi_i) = \deg(\rho_i)$.
+All together, we can configure these four isogenies as a commutative diagram:</p><figure><img src=/images/pushforward_isogenies.png alt="A diagram to show how the pushforwards of isogenies work." width=350px><figcaption><p><strong>Figure 1</strong>: We can configure our isogenies and their pushforwards into a commutative diagram.</p></figcaption></figure><p>Via composition, the isogeny $\psi : E_0 \to E_3$ can be represented in two ways:</p><p>$$
+\psi = [\phi_1]_\star \phi_2 \circ \phi_1 = [\phi_2]_\star \phi_1 \circ \phi_2
+$$</p><p><strong>Note on SIDH</strong>: For those who are familiar with SIDH, this is the SIDH square.
+When Alice and Bob send (the now notorious) auxiliary
+torsion points, they are sending the <em>pushforward</em> of the torsion basis under the action of
+their secret isogeny. This is what allowed for the construction of the shared secret $j(E_3) = j(E_3&rsquo;)$.</p><h3 id=computing-pushforwards-in-sagemath>Computing pushforwards in SageMath</h3><p>Computing the pushforward of isogenies in SageMath is easy. Below we show
+a snippet that implements the above discussion.</p><div class=highlight><pre tabindex=0 style=color:#ebdbb2;background-color:#282828;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-py data-lang=py><span style=display:flex><span><span style=color:#928374;font-style:italic># Assume that this data is already known</span>
+</span></span><span style=display:flex><span><span style=color:#fe8019>from</span> known_data <span style=color:#fe8019>import</span> E0, ϕ1_ker, ϕ2_ker
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#928374;font-style:italic># Given isogenies and curves</span>
+</span></span><span style=display:flex><span>ϕ1 <span style=color:#fe8019>=</span> E0<span style=color:#fe8019>.</span>isogeny(ϕ1_ker, algorithm<span style=color:#fe8019>=</span><span style=color:#b8bb26>&#34;factored&#34;</span>) 
+</span></span><span style=display:flex><span>E1 <span style=color:#fe8019>=</span> ϕ1<span style=color:#fe8019>.</span>codomain()
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>ϕ2 <span style=color:#fe8019>=</span> E0<span style=color:#fe8019>.</span>isogeny(ϕ2_ker, algorithm<span style=color:#fe8019>=</span><span style=color:#b8bb26>&#34;factored&#34;</span>)
+</span></span><span style=display:flex><span>E2 <span style=color:#fe8019>=</span> ϕ2<span style=color:#fe8019>.</span>codomain()
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#928374;font-style:italic># Compute the pushforward of the kernels</span>
+</span></span><span style=display:flex><span>ρ1_ker <span style=color:#fe8019>=</span> ϕ2(ϕ1_ker) <span style=color:#928374;font-style:italic># This will be a point on E2</span>
+</span></span><span style=display:flex><span>ρ2_ker <span style=color:#fe8019>=</span> ϕ1(ϕ2_ker) <span style=color:#928374;font-style:italic># This will be a point on E1</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#928374;font-style:italic># Compute the isogenies to E3 and E3&#39;</span>
+</span></span><span style=display:flex><span>ρ1 <span style=color:#fe8019>=</span> E2<span style=color:#fe8019>.</span>isogeny(ρ1_ker, algorithm<span style=color:#fe8019>=</span><span style=color:#b8bb26>&#34;factored&#34;</span>)
+</span></span><span style=display:flex><span>ρ2 <span style=color:#fe8019>=</span> E1<span style=color:#fe8019>.</span>isogeny(ρ2_ker, algorithm<span style=color:#fe8019>=</span><span style=color:#b8bb26>&#34;factored&#34;</span>)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#928374;font-style:italic># The codomains of these isogenies are isomorphic</span>
+</span></span><span style=display:flex><span><span style=color:#fe8019>assert</span> ρ1<span style=color:#fe8019>.</span>codomain()<span style=color:#fe8019>.</span>is_isomorphic(ρ2<span style=color:#fe8019>.</span>codomain())
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#928374;font-style:italic># We can write the isogeny as</span>
+</span></span><span style=display:flex><span>ψ <span style=color:#fe8019>=</span> ρ1 <span style=color:#fe8019>*</span> ϕ2 <span style=color:#928374;font-style:italic># E0 → E2 → E3</span>
+</span></span><span style=display:flex><span>ψ_prime <span style=color:#fe8019>=</span> ρ2 <span style=color:#fe8019>*</span> ϕ1 <span style=color:#928374;font-style:italic># E0 → E1 → E3&#39;</span>
+</span></span><span style=display:flex><span><span style=color:#fe8019>assert</span> ψ<span style=color:#fe8019>.</span>codomain()<span style=color:#fe8019>.</span>is_isomorphic(ψ_prime<span style=color:#fe8019>.</span>codomain())
+</span></span></code></pre></div><h2 id=pullbacks-of-isogenies>Pullbacks of isogenies</h2><p>There is a mapping dual to the pushforward called the <em>pullback</em>.
+Given the same data as above, where the isogenies
+$\phi_1 : E_0 \to E_1$ and $\rho_2 : E_1 \to E_3$ are of coprime degree,
+the pullback of $\rho_2$ under the action of $\phi_1$ is denoted:
+$[\phi_1]^\star \rho_2 : E_0 \to E_2$.</p><p>Practically, we compute this by considering the image of $\ker(\rho_2)$ under the action
+of the <em>dual</em> isogeny $\widehat{\phi}_1$:</p><p>$$
+\phi_j = [\phi_i]^\star \rho_j = [\widehat{\phi}_i]_\star \rho_j : E \to E / \langle \widehat{\phi}_i(\ker(\rho_j)) \rangle
+$$</p><p>Note that by using the pushforward and pullback maps, the entire SIDH square
+can be recovered given any two coprime degree isogenies. We will use both of these mappings
+in <code>IdealToIsogenyFromKLPT()</code> to compute various unknown isogenies from
+isogenies that we can efficiently compute.</p><h3 id=computing-pullbacks-in-sagemath>Computing pullbacks in SageMath</h3><p>Below, we show
+a snippet that computes the above discussion of pullback isogenies.</p><div class=highlight><pre tabindex=0 style=color:#ebdbb2;background-color:#282828;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-py data-lang=py><span style=display:flex><span><span style=color:#928374;font-style:italic># Assume that this data is already known</span>
+</span></span><span style=display:flex><span><span style=color:#fe8019>from</span> known_data <span style=color:#fe8019>import</span> E0, E2, ϕ1_ker, ρ2_ker
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#928374;font-style:italic># Given isogenies and curves</span>
+</span></span><span style=display:flex><span>ϕ1 <span style=color:#fe8019>=</span> E0<span style=color:#fe8019>.</span>isogeny(ϕ1_ker, algorithm<span style=color:#fe8019>=</span><span style=color:#b8bb26>&#34;factored&#34;</span>) 
+</span></span><span style=display:flex><span>E1 <span style=color:#fe8019>=</span> ϕ1<span style=color:#fe8019>.</span>codomain()
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>ρ2 <span style=color:#fe8019>=</span> E1<span style=color:#fe8019>.</span>isogeny(ρ2_ker, algorithm<span style=color:#fe8019>=</span><span style=color:#b8bb26>&#34;factored&#34;</span>)
+</span></span><span style=display:flex><span>E3 <span style=color:#fe8019>=</span> ϕ2<span style=color:#fe8019>.</span>codomain()
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#928374;font-style:italic># First, we need the dual of ϕ1</span>
+</span></span><span style=display:flex><span>ϕ1_dual <span style=color:#fe8019>=</span> ϕ1<span style=color:#fe8019>.</span>dual() <span style=color:#928374;font-style:italic># This can be slow for large degree ϕ1</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#928374;font-style:italic># Now we compute the image of ρ2_ker through ϕ1_dual</span>
+</span></span><span style=display:flex><span>ϕ2_ker <span style=color:#fe8019>=</span> ϕ1_dual(ρ2_ker) <span style=color:#928374;font-style:italic># This is a point on E0</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#928374;font-style:italic># Compute the pullback isogeny</span>
+</span></span><span style=display:flex><span>ϕ2 <span style=color:#fe8019>=</span> E0<span style=color:#fe8019>.</span>isogeny(ϕ2_ker, algorithm<span style=color:#fe8019>=</span><span style=color:#b8bb26>&#34;factored&#34;</span>)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#928374;font-style:italic># The codomains of these isogenies are isomorphic</span>
+</span></span><span style=display:flex><span><span style=color:#fe8019>assert</span> ϕ2<span style=color:#fe8019>.</span>codomain()<span style=color:#fe8019>.</span>is_isomorphic(E2)
+</span></span></code></pre></div><h2 id=pushforwards-and-pullbacks-of-ideals>Pushforwards and pullbacks of ideals</h2><p>Via the Deuring correspondence, we can view an integral, cyclic ideal $I$ of norm $n(I) = N$
+with left order $\OO_L$ and right order $\OO_R$ as equivalent to a cyclic isogeny
+$\phi : E \to E^\prime$ of degree $N$, for which $\End(E) \cong \OO_L$ and $\End(E^\prime) \cong \OO_R$.</p><p>We view the <em>pushforward</em> of an ideal $[I]_\star J$ as being the ideal
+$I_{[\phi_I]_\star \phi_J}$ equivalent to the isogeny $[\phi_I]_\star \phi_J$. Similarly,
+the <em>pullback</em> of the ideal $[I]^\star J$ corresponds to the isogeny
+$[\phi_I]^\star \phi_J = [\widehat{\phi}_I]_\star \phi_J$.</p><p>For isogenies, pushforwards and pullbacks take a kernel generator for some isogeny and
+map it to a new curve to produce an isogeny with the same degree but new (co)domain, the
+pushforward and pullback of an ideal is morally the same.</p><p>Let us align notation with the previous discussion of isogenies. We denote $I_1$ and $I_2$ to be ideals corresponding
+to $I_{\phi_1}$ and $I_{\phi_2}$, and $J_i = [I_j]_\star I_i$ to correspond to the pushforwards.</p><p>Explicitly, the pushforward
+$[I_2]_\star I_1$ takes the ideal $I_1$ with left order $\OO_0$ and right order $\OO_1$ and computes
+an ideal with left order $\OO_2$ and right order $\OO_3$. Similarly, the pullback $[I_1]^\star J_2$
+takes the ideal $J_2$ with left order $\OO_1$ and right order $\OO_3$ and computes the ideal
+(equivalent to) $I_2$, with left order $\OO_0$ and right order $\OO_2$.</p><figure><img src=/images/pushforward_ideals.png alt="A diagram to show how the pushforwards of isogenies work." width=350px><figcaption><p><strong>Figure 2</strong>: We can redraw Figure 1, replacing the isogenies with the equivalent ideals via the Deuring correspondence.</p></figcaption></figure><p>In SQISign, we will use these maps when we have an ideal $I$ with left-order $\OO$, and
+connecting ideal $I_\tau$ with left-order $\OO_0$ and right order $\OO$. Many of our algorithms
+are only efficient when the left order of the input ideal is the special extremal maximal order
+$\OO_0$, so when we wish to perform a computation with $I$,
+we first perform a
+pullback to find $K = [I_\tau]^\star I$, which has left-order $\OO_0$. We can then perform various computations on $K$ to obtain $K&rsquo;$.
+Finally, we compute the pushforward $[I_\tau]_\star K^\prime$ and return something equivalent to
+$I$ with left order $\OO$.</p><h3 id=ideal-computations>Ideal computations</h3><p>We do not need to perform the pushforwards and pullbacks at the level of isogenies, we can
+work directly with the ideals themselves. Let us review a few tricks which are outlined in Lemma 3
+of the SQISign paper.</p><p>Let $I_i$ and $J_i$ be given as above, and let $K$ be the ideal corresponding to the isogeny
+$\psi : E_0 \to E_3$. We can compute the ideal $K$ connecting $\OO_0$ to $\OO_3$ from the
+multiplication of two ideals, or equivalently, from an intersection:
+$$
+K = I_1\cdot J_2 = I_2\cdot J_1 = I_1 \cap I_2.
+$$ From the above, we see that the pushforwards can be recovered by
+multiplying with the inverse ideal:
+$$
+J_i = I_j^{-1}\cdot (I_i \cap I_j) = I_j^{-1} \cdot K.
+$$ Finally, the pullbacks $I_i$ can be recovered by noticing that $[I_i]^\star J_j = [I_i]^\star [I_i]_\star I_j$
+and taking the part of norm $N_i$ from the ideal of norm $n(I_2 J_1) = N_1 N_2$ in the following way:
+$$
+I_i = [I_j]^\star J_i = I_j \cdot J_i + N_i \OO_0.
+$$</p><h3 id=computing-pushforwards-and-pullbacks-in-sagemath>Computing pushforwards and pullbacks in SageMath</h3><p>Below, we give the pushforward and pullback implementations
+following the equations given above. SageMath has many functions which makes this fairly straightforward.
+We note that <code>ideal_generator()</code> is the
+function which given an left-$\OO$ ideal $I$ with $n(I) = N$,
+finds $\alpha \in \BB$ such that $I = \langle \alpha, N \rangle = \OO \alpha + \OO N$.</p><div class=highlight><pre tabindex=0 style=color:#ebdbb2;background-color:#282828;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-py data-lang=py><span style=display:flex><span><span style=color:#fe8019>def</span> <span style=color:#fabd2f>pushforward_ideal</span>(O0, O1, I, Iτ):
+</span></span><span style=display:flex><span>    <span style=color:#b8bb26>&#34;&#34;&#34;
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    Input: Ideal I left order O0
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>           Connecting ideal Iτ with left order O0
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>           and right order O1
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    Output The ideal given by the pushforward [Iτ]_* I
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    &#34;&#34;&#34;</span>
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>assert</span> I<span style=color:#fe8019>.</span>left_order() <span style=color:#fe8019>==</span> O0
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>assert</span> Iτ<span style=color:#fe8019>.</span>left_order() <span style=color:#fe8019>==</span> O0
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>assert</span> Iτ<span style=color:#fe8019>.</span>right_order() <span style=color:#fe8019>==</span> O1
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    N <span style=color:#fe8019>=</span> ZZ(I<span style=color:#fe8019>.</span>norm())
+</span></span><span style=display:flex><span>    Nτ <span style=color:#fe8019>=</span> ZZ(Iτ<span style=color:#fe8019>.</span>norm())
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    K <span style=color:#fe8019>=</span> I<span style=color:#fe8019>.</span>intersection(O1 <span style=color:#fe8019>*</span> Nτ)
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>return</span> invert_ideal(Iτ) <span style=color:#fe8019>*</span> K
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#fe8019>def</span> <span style=color:#fabd2f>pullback_ideal</span>(O0, O1, I, Iτ):
+</span></span><span style=display:flex><span>    <span style=color:#b8bb26>&#34;&#34;&#34;
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    Input: Ideal I with left order O1
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>           Connecting ideal Iτ with left order O0
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>           and right order O1
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    Output The ideal given by the pullback [Iτ]^* I
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    &#34;&#34;&#34;</span>
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>assert</span> I<span style=color:#fe8019>.</span>left_order() <span style=color:#fe8019>==</span> O1
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>assert</span> Iτ<span style=color:#fe8019>.</span>left_order() <span style=color:#fe8019>==</span> O0
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>assert</span> Iτ<span style=color:#fe8019>.</span>right_order() <span style=color:#fe8019>==</span> O1
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    N <span style=color:#fe8019>=</span> ZZ(I<span style=color:#fe8019>.</span>norm())
+</span></span><span style=display:flex><span>    Nτ <span style=color:#fe8019>=</span> ZZ(Iτ<span style=color:#fe8019>.</span>norm())
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    α <span style=color:#fe8019>=</span> ideal_generator(I)
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>return</span> O0 <span style=color:#fe8019>*</span> N <span style=color:#fe8019>+</span> O0 <span style=color:#fe8019>*</span> α <span style=color:#fe8019>*</span> Nτ
+</span></span></code></pre></div><h2 id=sqisign-response>SQISign response</h2><p>Let us end this discussion with an efficient computation of a product of ideals
+needed when computing the <code>response()</code> for SQISign.</p><p>In SQISign&rsquo;s response, we are asked to find the value of $\bar{I}_\tau \cdot I_\psi \cdot I_\phi$
+with $\psi : E_0 \to E_1$, $\phi : E_1 \to E_2$ and $\tau : E_0 \to E_A$, such that the product of ideals
+corresponds to the isogeny $\sigma : E_A \to E_2$.</p><p>Using the above notation, we have $I_\phi = J_2$ and $I_\psi = I_1$. So, we can use the identity:
+$$
+J_2 = I_1^{-1} \cdot (I_1 \cap I_2) \Rightarrow I_1 \cdot J_2 = (I_1 \cap I_2).
+$$</p><p>As a result, $I_\psi \cdot I_\phi$ can be computed directly from the intersection of $I_\psi$
+and the pullback $[I_\psi]^\star I_\phi$ (which would be $I_1$ in the above notation).
+This means we can save computing $I_\phi$ itself (which is slow as its left order
+is not $\OO_0$) and instead work with the pullback which does have left order $\OO_0$ and
+so allows for efficient computations.</p><p>Below we include a snippet which shows this computation as it appears in <a href=https://github.com/LearningToSQI/SQISign-SageMath/blob/main/SQISign.py><code>SQISign.py</code></a>.</p><div class=highlight><pre tabindex=0 style=color:#ebdbb2;background-color:#282828;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-py data-lang=py><span style=display:flex><span><span style=color:#fe8019>from</span> isogenies_and_ideals <span style=color:#fe8019>import</span> kernel_to_ideal
+</span></span><span style=display:flex><span><span style=color:#fe8019>from</span> known_data <span style=color:#fe8019>import</span> E0, Iτ, ϕ_ker, ψ_ker
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#928374;font-style:italic># Given isogenies and curves</span>
+</span></span><span style=display:flex><span>ψ <span style=color:#fe8019>=</span> E0<span style=color:#fe8019>.</span>isogeny(ψ_ker, algorithm<span style=color:#fe8019>=</span><span style=color:#b8bb26>&#34;factored&#34;</span>)
+</span></span><span style=display:flex><span>E1 <span style=color:#fe8019>=</span> ψ<span style=color:#fe8019>.</span>codomain()
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>ϕ <span style=color:#fe8019>=</span> E1<span style=color:#fe8019>.</span>isogeny(ϕ_ker, algorithm<span style=color:#fe8019>=</span><span style=color:#b8bb26>&#34;factored&#34;</span>) 
+</span></span><span style=display:flex><span>E2 <span style=color:#fe8019>=</span> ϕ1<span style=color:#fe8019>.</span>codomain()
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#928374;font-style:italic># First, we need the dual of ψ</span>
+</span></span><span style=display:flex><span>ψ_dual <span style=color:#fe8019>=</span> ψ<span style=color:#fe8019>.</span>dual() <span style=color:#928374;font-style:italic># This can be slow for large degree ϕ1</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#928374;font-style:italic># Now we compute the image of ϕ_ker through ψ_dual</span>
+</span></span><span style=display:flex><span>ϕ_ker_pullback <span style=color:#fe8019>=</span> ψ_dual(ϕ_ker) <span style=color:#928374;font-style:italic># This is a point on E0</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#928374;font-style:italic># Compute the ideal Iψ from ψ_ker</span>
+</span></span><span style=display:flex><span>Iψ <span style=color:#fe8019>=</span> kernel_to_ideal(ψ_ker, ψ_ker<span style=color:#fe8019>.</span>order())
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#928374;font-style:italic># Compute the pullback isogeny</span>
+</span></span><span style=display:flex><span>Iϕ_pullback <span style=color:#fe8019>=</span> kernel_to_ideal(ϕ_ker_pullback, ϕ_ker_pullback<span style=color:#fe8019>.</span>order())
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#928374;font-style:italic># Compute the product Iψ * Iϕ</span>
+</span></span><span style=display:flex><span>IψIϕ <span style=color:#fe8019>=</span> Iψ<span style=color:#fe8019>.</span>intersection(Iϕ_pullback)
+</span></span><span style=display:flex><span><span style=color:#fe8019>assert</span> IψIϕ<span style=color:#fe8019>.</span>norm() <span style=color:#fe8019>==</span> Iψ<span style=color:#fe8019>.</span>norm() <span style=color:#fe8019>*</span> Iϕ_pullback<span style=color:#fe8019>.</span>norm()
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#928374;font-style:italic># Compute the final product of ideals</span>
+</span></span><span style=display:flex><span><span style=color:#928374;font-style:italic># I = Iτ_bar * Iψ * Iϕ</span>
+</span></span><span style=display:flex><span>Iτ_bar <span style=color:#fe8019>=</span> Iτ<span style=color:#fe8019>.</span>conjugate()
+</span></span><span style=display:flex><span>I <span style=color:#fe8019>=</span> Iτ_bar <span style=color:#fe8019>*</span> IψIϕ
+</span></span><span style=display:flex><span><span style=color:#fe8019>assert</span> I<span style=color:#fe8019>.</span>norm() <span style=color:#fe8019>==</span> Iτ_bar<span style=color:#fe8019>.</span>norm() <span style=color:#fe8019>*</span> IψIϕ<span style=color:#fe8019>.</span>norm()
+</span></span></code></pre></div><p><a href=#top>Back to Top</a></p></article></div><div class=flex-menu><div class=menu-header-mobile>Contents</div><div class=page-list><div class=menu-header>Contents</div><div class=contents><a href=/>Introduction</a></div><div class=contents><a href=/posts/overview/>Overview</a></div><div class=contents><a href=/posts/cyclic-ideals/>Working with Cyclic Ideals</a></div><div class=contents><a href=/posts/up-to-iso/>Correct up to Isomorphism</a></div><div class=contents><a href=/posts/pushforwards/>Pushforwards and Pullbacks</a></div><div class=contents><a href=/posts/klpt-bounds/>Estimating Bounds for KLPT</a></div><div class=contents><a href=/posts/prime-ideal/>Equivalent Prime Norm Ideals</a></div><div class=contents><a href=/posts/strong-approximation-lattice/>Strong Approximation Lattice Trick</a></div><div class=contents><a href=/posts/ideal-kernel/>Between Kernels and Ideals</a></div><div class=contents><a href=/posts/ideal-to-isogeny/>Computing Isogenies from Ideals</a></div><div class=contents><a href=/posts/ideal-to-isogeny-subroutines/>Subroutines when Computing Isogenies from Ideals</a></div><div class=contents><a href=/posts/meet-in-the-middle/>Meet in the Middle Isogenies</a></div><div class=contents><a href=/posts/small-steps/>Small Steps from Curves with Small Endomorphisms</a></div><div class=contents><a href=/posts/compression/>Modifying Compression</a></div><div class=contents><a href=/posts/future-work/>Future Work</a></div></div></div></div></main></div></body><footer><div class=footer-left><div class=footer-title>Learning to SQI<br><em>Implementing SQISign in SageMath</em></div><div class=footer-authors>Maria Corte-Real Santos,
+Giacomo Pope</div></div><div class=footer-right><a href=https://github.com/jack4818/SQISign-SageMath><img class=social-link alt=GitHub src=/images/github.svg></a></div></footer></html>

@@ -1,0 +1,237 @@
+<!doctype html><html lang=en-us><head><meta charset=utf-8><meta http-equiv=x-ua-compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1"><meta name=format-detection content="telephone=no"><meta name=description content="Upon receiving the response $\sigma$, the verifier needs to ensure that it is an isogeny $E_A \rightarrow E_2$ of degree $D$, such that the composition with the challenge isogeny is cyclic. To send the response to the verifier, we want to find a compact and efficient representation of $\sigma$ that can be sent to the verifier.
+We found that we needed to include an additional bit into the compressed representation $S$ of the response isogeny $\sigma: E_A \to E_2$ to ensure that it is correctly extracted during decompression."><title>Modifying Compression</title><meta name=description content="A SageMath implementation of SQISign"><link rel=canonical href=https://learningtosqi.github.io><meta property="og:type" content="website"><meta property="og:title" content="Learning to SQI | Modifying Compression"><meta property="og:description" content="A SageMath implementation of SQISign"><meta property="og:url" content="https://learningtosqi.github.io/"><meta property="og:site_name" content="Learning to SQI | Modifying Compression"><meta property="og:image" content="/images/banner.png"><meta name=twitter:card content="summary_large_image"><meta name=twitter:title content="Learning to SQI | Modifying Compression"><meta name=twitter:description content="A SageMath implementation of SQISign"><meta name=twitter:site content="https://learningtosqi.github.io"><meta name=twitter:image content="/images/banner.png"><link rel=apple-touch-icon sizes=180x180 href=/favicon/apple-touch-icon.png><link rel=icon type=image/png sizes=32x32 href=/favicon/favicon-32x32.png><link rel=icon type=image/png sizes=16x16 href=/favicon/favicon-16x16.png><link rel=manifest href=/favicon/site.webmanifest><link rel=mask-icon href=f/avicon/safari-pinned-tab.svg color=#0017f5><link rel="shortcut icon" href=/favicon/favicon.ico><meta name=msapplication-TileColor content="#00aba9"><meta name=msapplication-config content="/favicon/browserconfig.xml"><meta name=theme-color content="#ffffff"><link rel=preconnect href=https://fonts.googleapis.com><link rel=preconnect href=https://fonts.gstatic.com crossorigin><link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,300;0,500;1,300&display=swap" rel=stylesheet><link rel=stylesheet href=//cdn.jsdelivr.net/npm/hack-font@3.3.0/build/web/hack.css><link rel=stylesheet href=/css/main.7bd2600936685e5cc7c0ae3b91978cfe3727b0609b2e43f94a050f2d2c922dbb5c196ba8242b7233074547a13c912b1bdc9086eca139f9a2f0aab829dd9e605f.css integrity="sha512-e9JgCTZoXlzHwK47kZeM/jcnsGCbLkP5SgUPLSySLbtcGWuoJCtyMwdFR6E8kSsb3JCG7KE5+aLwqrgp3Z5gXw=="><script>MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]],processEscapes:!0,processEnvironments:!0,macros:{phi:"\\varphi",End:"\\textrm{End}",Nrd:"\\textrm{Nrd}",OO:"\\mathcal{O}",BB:"\\mathcal{B}_{p, \\infty}",NN:"\\mathcal{N}",TT:"\\mathcal{T}",ZZ:"\\mathbb{Z}",QQ:"\\mathbb{Q}",FF:"\\mathbb{F}"}},options:{skipHtmlTags:["script","noscript","style","textarea","pre"]}},window.addEventListener("load",e=>{document.querySelectorAll("mjx-container").forEach(function(e){e.parentElement.classList+="has-jax"})})</script><script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+<script id=MathJax-script async src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js></script></head><body a=auto><div class=wrapper><header><h1 class=title-header><a href=/>Learning to SQI</a></h1><h2 class=alt-title>Implementing SQISign in SageMath</h2><div class=authors>Maria Corte-Real Santos,
+Giacomo Pope</div></header><main class=page-content aria-label=Content><div class=flex-wrapper><div class=flex-content><article><h1>Modifying Compression</h1><p>Upon receiving the response $\sigma$, the verifier needs to ensure that it is an isogeny $E_A \rightarrow E_2$ of degree $D$, such that the composition with the challenge isogeny
+is cyclic. To send the response to the verifier, we want to find a compact and efficient representation
+of $\sigma$ that can be sent to the verifier.</p><p>We found that we needed to include an additional
+bit into the compressed representation $S$ of the response isogeny $\sigma: E_A \to E_2$ to ensure that
+it is correctly extracted during decompression. This page details
+the issue we faced and how an additional bit is enough to remove ambiguity.</p><p>Additionally, we detail our method of deterministically generating random points, which
+requires normalisation of the isogeny during compression. As far as we are aware, this does not appear in
+the SQISign paper, and so we include a few notes for the interested reader.</p><p>The page finishes with an overview of the algorithms with python snippets. For the whole
+implementation of the various sub-algorithms, see <a href=https://github.com/LearningToSQI/SQISign-SageMath/blob/main/compression.py><code>compression.py</code></a>.</p><h2 id=overview-of-compression>Overview of compression</h2><p>The idea of the compression algorithm is to take an isogeny $\sigma$ and break it into pieces
+$\sigma = \sigma_v \circ \cdots \circ \sigma_1$ of degree at most $\ell^f$, such that each isogeny
+has degree dividing the available torsion and can be computed without extending the base field.
+We then find a
+canonical torsion basis of $E_A[2^f] = \langle R_1, Q_1 \rangle$ and represent
+$\ker(\sigma_1) = R_1 + [S_1]Q_1$ for some integer $S_1 &lt; 2^f$. As one can compute the basis deterministically,
+it is enough to send a user $S_1$, from which the kernel (and hence the isogeny) can then be computed.</p><p>We can then iteratively repeat this. By using $Q_2 = \sigma_1(Q_1)$ as one basis element for the
+kernel of $\sigma_2$, we find an orthogonal $R_2$ though some deterministic method to compute $S_2$
+corresponding to $\ker(\sigma_2)$ as above.
+SQISign additionally suggests that the compression stores a 4-bit value $s_i$ to help the decompression
+algorithm compute $R_i$ efficiently, <em>i.e.</em>, there is some function such that <code>Ri = compute_R(Ei, si)</code>.</p><p>Putting it all together, the integers $S_i$, $s_i$ can be packaged together in their binary representation
+to produce a bitstring of length $(f + 4)(v-1) + f$ (we do not need the hint $s_1$, as we compute the canonical
+torsion basis):</p><p>$$
+S = S_1 \mathrel{||} s_2 \mathrel{||} S_2 \mathrel{||} \ldots \mathrel{||} s_v \mathrel{||} S_v.
+$$</p><h2 id=computing-the-kernel-of-an-isogeny>Computing the kernel of an isogeny</h2><p>To compute the kernel, we use the trick discussed on page <a href=/posts/meet-in-the-middle/>Meet in the Middle</a>
+to find $\sigma_i(R_i + [S_i]Q_i) = \OO$ such
+that $\sigma_i(R_i) = [-S_i] \sigma_i(Q_i)$. Then, all we need to do is to compute the image of the basis elements
+under the action of the isogeny and compute a discrete log. As the order of the points is $2^f$, this is
+very fast thanks to the Pohlig-Hellman algorithm. In the implementation, we further improve
+performance by mapping elliptic curve elements to finite field elements with the Weil pairing, which yields
+about a 30% improvement when solving the discrete log.</p><p>However, given a fixed random basis $E_A[2^f] = \langle R_1, Q_1 \rangle$, we know only that at least one
+of $\sigma_i(R_1)$ and $\sigma_i(Q_1)$ has order exactly $D$, so there will be isogenies whose kernel cannot
+be written into the prescribed format. To see why, let us look at how we can generate kernels.</p><p>Given $E_A[D] = \langle R, Q \rangle$ we can compute all possible kernels generators $K$ from the following
+linear combinations:</p><p>$$
+K = [a]R + [b]Q, \quad a,b \in \mathbb{Z} / D\mathbb{Z}, \quad \gcd(a,b,D) = 1.
+$$</p><p>Note: the condition for at least one of the integers $a,b$ to be coprime with $D$ is to ensure that $K$ has order
+$D$. For the case when $D = 2^f$, we need at least one of $a,b$ to be odd.</p><p>As we are interested in cyclic isogenies, then any two points $K&rsquo; = [x]K$ for some integer $x$ such that $\gcd(x, D) = 1$,
+produce the same isogeny, so allowing $a,b$ to span all values will result in over-counting.</p><p>When we have $D = \ell^k$ for a prime power, we can always divide out by the coprime element to get one of two
+simple representations:</p><p>$$
+\begin{aligned}
+K &= R + [b] Q, \qquad & &b \in \mathbb{Z} / \ell^k \mathbb{Z} \\
+K &= [\ell a] R + Q, \qquad & &a \in \mathbb{Z} / \ell^{k-1} \mathbb{Z}
+\end{aligned}
+$$</p><p>Looking at this, we see that the SQISign method of writing $K_i = R_i + [S_i] Q_i$ will not
+capture every kernel, and there are isogenies $\sigma_i$ whose kernels cannot be compressed
+into a single integer $S_i$.</p><p>Specifically, the kernels which we cannot capture are those generated by elements which have an
+$\ell$-multiply of $R$. Take for example the point
+$K = [\ell]R + Q$. Looking at the image of $R,Q$ under the isogeny generated by $K$, we have:
+$\sigma(Q) = [-\ell]\sigma(R)$ and so $\sigma(Q)$ will only have order $\ell^{k-1}$.</p><p>When the order of $\sigma(Q)$ is smaller than the order of $\sigma(R)$, we will have no solution to the discrete logarithm
+and thus no integer $S_i$ to include in the compressed representation. So, how do we encode isogenies which are generated
+by these points?</p><p>The option we have chosen is to compute $R_1, Q_1$ canonically and then check if $\sigma(Q_1)$ has full order. When it does not,
+we simply swap $R_1, Q_1 = Q_1, R_1$ and we know our new $Q_1$ has full order. When this swap is performed, we set a <em>swap bit</em>
+$s_0 = \texttt{1}$ and $s_0 = \texttt{0}$ otherwise. By appending this single swap bit to our compressed bitstring, then the user decompressing knows
+to swap the order of the canonical torsion basis and all kernel generators in $E[D]$ can be represented.</p><p>We do not need to worry about storing a swap bit for any other isogeny in the chain. This is because
+we pick $K_i = R_i + [S_i]Q_i$ such that $Q_i$ is
+always orthogonal to $R_i$ and hence also to $K_i$.
+As $Q_i$ is orthogonal to $\ker(\sigma_i)$, $\sigma_i(Q_i)$ will always have full order and there
+will always be a solution to the discrete log for the next step.</p><p>With this method, we have a compressed representation of the response isogeny of length $(f + 4)(v-1) + f + 1$:</p><p>$$
+S = s_0 \mathrel{||} S_1 \mathrel{||} s_2 \mathrel{||} S_2 \mathrel{||} \ldots \mathrel{||} s_v \mathrel{||} S_v.
+$$</p><h2 id=computing-deterministic-orthogonal-points>Computing deterministic orthogonal points</h2><p>The second part of the compression algorithm which requires careful attention is the deterministic generation
+of the orthogonal points $R_i \in E_i$.</p><p>In compression, we have an isogeny $\sigma_i$, and from this we compute a kernel $R_i + [S_i]Q_i$. In decompression,
+the user receives the domain $E_i$ and $S_i$. The basis for the kernel is deterministically generated and, from
+this, $\sigma_i&rsquo;$ is computed from $K_i$.</p><p>However, although these isogenies have the same kernel generators, the isogenies $\sigma_i$ and $\sigma_i&rsquo;$ only agree
+on a codomain up to isomorphism. This is no problem for computing the isogeny walk itself, but it is an issue for
+deterministically generating random points.</p><p>For compression, we expect the user to take the curve $E_i$, with the point $Q_i$ and to randomly sample points
+$P \in E_i$ until a point orthogonal to $Q_i$ is found, which we name $R_i$. The hint $s_i$ tells the
+decompression algorithm to take the $s_i^{\text{th}}$ point, which avoids computing expensive checks.
+As $s_i$ has only four bits allocated to it, if we require more than 15 samples, all $s_i$ can communicate is
+&ldquo;skip the first 15 samples and check each point after that&rdquo;.
+In practice, we usually find $R_i$ in much less than 15 queries.</p><p>However, if one naively computes $S_i$ and sends this to be decompressed, then the compressor samples random
+points on $E_{i+1}$, where as the decompressor samples from points on $E_{i+1}&rsquo;$, where we have
+$E_{i+1} \cong E_{i+1}&rsquo;$, but not necessarily equality. As a result, the points $R_i$ obtained
+from compression will not align with points $R_i&rsquo;$ sampled during decompression.</p><p>To fix this issue, we normalise the isogeny chain during compression by computing additional isogenies. The
+trick is to take $\sigma_i$ and compute $S_i$ such that $K_i = R_i + [S_i]Q_i$. Then we compute a new isogeny
+$\sigma_i&rsquo; : E_{i} \to E_{i} / \langle K_i \rangle = E_{i+1}&rsquo;$, which is the isogeny that the decompression
+will obtain. Then
+$Q_{i+1} = \sigma_i&rsquo;(Q_i)$ is computed. Finally, we have to alter $\sigma_{i+1}$ with an isomorphism so that
+its domain matches the codomain of the newly derived $\sigma_{i}&rsquo;$. This makes compression more expensive (we
+must compute $v$ additional isogenies after computing the kernel), but it ensures that decompression will
+generate $R_i \in E_i$ which match precisely with those sampled during compression.</p><p>Practically, we find random points which can be obtained from a hint $s_i$ by seeding the random number generator
+of SageMath. We also have to be careful to pick the same result from the lift as SageMath returns $P,-P$ with
+equal probability.</p><div class=highlight><pre tabindex=0 style=color:#ebdbb2;background-color:#282828;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=display:flex><span><span style=color:#fe8019>def</span> <span style=color:#fabd2f>generate_random_point</span>(E, seed<span style=color:#fe8019>=</span><span style=color:#fe8019>None</span>):
+</span></span><span style=display:flex><span>    <span style=color:#b8bb26>&#34;&#34;&#34;
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    E.random_point() returns either P
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    or -P with equal probability.
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    We always select the element with
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    smaller y-coordinate to make this
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    deterministic.
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    &#34;&#34;&#34;</span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Allow a setting of the seed to</span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># ensure the same point is always returned</span>
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>if</span> seed <span style=color:#fe8019>is</span> <span style=color:#fe8019>not</span> <span style=color:#fe8019>None</span>:
+</span></span><span style=display:flex><span>        set_random_seed(seed)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    P <span style=color:#fe8019>=</span> E<span style=color:#fe8019>.</span>random_element()
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>return</span> <span style=color:#fabd2f>min</span>(P, <span style=color:#fe8019>-</span>P)
+</span></span></code></pre></div><h2 id=compression>Compression</h2><p>With the swap bit addressed and the isogeny chain normalised to ensure the correct
+points $R_i$ are sampled, we can now implement the compression algorithm as described
+in the SQISign paper. We outline it below for completeness.</p><ol><li>Split an isogeny $\sigma$ into $v$ pieces: $\sigma = \sigma_v \circ \cdots \circ \sigma_1$,
+where each isogeny has degree dividing $2^f$. In practice only $\sigma_v$ will have degree
+less than or equal to $2^f$.</li><li>Compute the canonical torsion basis $E_A[2^f] = \langle R_1, Q_1 \rangle$.</li><li>If $\sigma_1(Q_1)$ has order less than $2^f$, then set $R_1,Q_1 = Q_1,R_1$ and set the
+sign bit $s_0 = \texttt{1}$, otherwise set $s_0 = \texttt{0}$. Add $s_0$ to the bitstring $S$.</li><li>Compute a generator of $\ker(\sigma_i)$ as $K_1 = R_1 + [S_1]Q_1$. Add $S_1$ to
+$S$ as a bitstring of length $f$.</li><li>Compute $\sigma_1&rsquo; : E_A \to E_A / \langle K_1 \rangle$. Set $Q_2 = \sigma_1&rsquo;(Q_1)$.</li><li><strong>Loop</strong> for $i \in \{ 2,\ldots,v \}$:<ol><li>Using an isomorphism, ensure the domain of $\sigma_{i}$ is equal to the codomain of
+$\sigma_{i-1}$ (the curve $Q_i$ is defined on). Set $E_i$ as this curve.</li><li>Compute a point $R_i \in E_i$ orthogonal to $Q_i$. Add the hint $s_i$ to $S$ to represent
+how many points were searched before finding $R_i$. If 15 or more curves were checked,
+set $s_i = \texttt{1111}$.</li><li>Compute a generator $K_i$ of $\ker(\sigma_i) = \langle R_i + [S_i] Q_i \rangle$. Add $S_i$ to $S$.</li><li>Compute $\sigma_i&rsquo; : E_i \to E_{i} / \langle K_i \rangle$ and set $Q_{i+1} = \sigma_i&rsquo;(Q_i)$.</li></ol></li><li>Output the bitstring:
+$$
+S = s_0 \mathrel{||} S_1 \mathrel{||} s_2 \mathrel{||} S_2 \mathrel{||} \ldots \mathrel{||} s_v \mathrel{||} S_v.
+$$</li></ol><p>A SageMath implementation of the above is as follows:</p><div class=highlight><pre tabindex=0 style=color:#ebdbb2;background-color:#282828;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-py data-lang=py><span style=display:flex><span><span style=color:#fe8019>def</span> <span style=color:#fabd2f>compression</span>(E, σ, l, f):
+</span></span><span style=display:flex><span>    <span style=color:#b8bb26>&#34;&#34;&#34;
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    Given an isogeny σ of degree l^e = l^vf compute a
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    compressed representation of the isogeny as a bitstring
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    in the form:
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    S = swap_bit || S1 || s2 || S2 || ... || sv || Sv
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    Note: swap_bit denotes when the torsion basis of the first
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    step must be swapped: R, Q = Q, R to ensure a solution to
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    the discrete log. This bit is needed to communicate to decom.
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    to do the same swap.
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    &#34;&#34;&#34;</span>
+</span></span><span style=display:flex><span>    S <span style=color:#fe8019>=</span> <span style=color:#b8bb26>&#34;&#34;</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Split σ into v isogenies of degree f</span>
+</span></span><span style=display:flex><span>    σ_chain <span style=color:#fe8019>=</span> isogeny_into_blocks(σ, l<span style=color:#fe8019>**</span>f)
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>assert</span> E <span style=color:#fe8019>==</span> σ_chain[<span style=color:#d3869b>0</span>]<span style=color:#fe8019>.</span>domain(), <span style=color:#b8bb26>&#34;Supplied curve is incorrect&#34;</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Compute a canonical torsion basis</span>
+</span></span><span style=display:flex><span>    σ1 <span style=color:#fe8019>=</span> σ_chain[<span style=color:#d3869b>0</span>]
+</span></span><span style=display:flex><span>    D <span style=color:#fe8019>=</span> σ1<span style=color:#fe8019>.</span>degree()
+</span></span><span style=display:flex><span>    R1, Q1 <span style=color:#fe8019>=</span> torsion_basis(E, D, canonical<span style=color:#fe8019>=</span><span style=color:#fe8019>True</span>)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Solve the discrete log and compute the image of σ1(Q1)</span>
+</span></span><span style=display:flex><span>    S1, Qi, swap_bit <span style=color:#fe8019>=</span> compute_S_and_next_Q(σ1, R1, Q1, f, first_step<span style=color:#fe8019>=</span><span style=color:#fe8019>True</span>)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Add the swap bit, as well as the dlog solution </span>
+</span></span><span style=display:flex><span>    S <span style=color:#fe8019>+=</span> <span style=color:#fabd2f>str</span>(swap_bit)
+</span></span><span style=display:flex><span>    S <span style=color:#fe8019>+=</span> S1
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># For the remaining steps, we can use Qi as one</span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># basis element so we only need to compute some</span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Ri linearly independent to Qi. There will always</span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># be a solution to the dlog as Qi has order D.</span>
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>for</span> σi <span style=color:#fe8019>in</span> σ_chain[<span style=color:#d3869b>1</span>:]:
+</span></span><span style=display:flex><span>        <span style=color:#928374;font-style:italic># We need to align the next step in the chain</span>
+</span></span><span style=display:flex><span>        <span style=color:#928374;font-style:italic># with σ_new computed previously, which means</span>
+</span></span><span style=display:flex><span>        <span style=color:#928374;font-style:italic># mapping the domain of the next step with the</span>
+</span></span><span style=display:flex><span>        <span style=color:#928374;font-style:italic># codomain of the last step.</span>
+</span></span><span style=display:flex><span>        Ei <span style=color:#fe8019>=</span> Qi<span style=color:#fe8019>.</span>curve()
+</span></span><span style=display:flex><span>        iso <span style=color:#fe8019>=</span> Ei<span style=color:#fe8019>.</span>isomorphism_to(σi<span style=color:#fe8019>.</span>domain())
+</span></span><span style=display:flex><span>        σi <span style=color:#fe8019>=</span> σi <span style=color:#fe8019>*</span> iso
+</span></span><span style=display:flex><span>        <span style=color:#fe8019>assert</span> Ei <span style=color:#fe8019>==</span> σi<span style=color:#fe8019>.</span>domain()
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        D <span style=color:#fe8019>=</span> σi<span style=color:#fe8019>.</span>degree()
+</span></span><span style=display:flex><span>        <span style=color:#928374;font-style:italic># The last element of the chain has degree D | l^f</span>
+</span></span><span style=display:flex><span>        <span style=color:#928374;font-style:italic># So we can ensure Qi ∈ E[D] by multiplying by a</span>
+</span></span><span style=display:flex><span>        <span style=color:#928374;font-style:italic># cofactor</span>
+</span></span><span style=display:flex><span>        <span style=color:#fe8019>if</span> D <span style=color:#fe8019>!=</span> l<span style=color:#fe8019>**</span>f:
+</span></span><span style=display:flex><span>            cofactor <span style=color:#fe8019>=</span> l<span style=color:#fe8019>**</span>f <span style=color:#fe8019>//</span> D
+</span></span><span style=display:flex><span>            Qi <span style=color:#fe8019>=</span> cofactor <span style=color:#fe8019>*</span> Qi
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#928374;font-style:italic># Add hint to compression to help decompression</span>
+</span></span><span style=display:flex><span>        <span style=color:#928374;font-style:italic># recover Ri</span>
+</span></span><span style=display:flex><span>        Ri, hint <span style=color:#fe8019>=</span> compute_R(Ei, Qi, D)
+</span></span><span style=display:flex><span>        S <span style=color:#fe8019>+=</span> hint_to_bitstring(hint)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#928374;font-style:italic># Add dlog to compression and derive next Qi</span>
+</span></span><span style=display:flex><span>        Si, Qi, _ <span style=color:#fe8019>=</span> compute_S_and_next_Q(σi, Ri, Qi, f)
+</span></span><span style=display:flex><span>        S <span style=color:#fe8019>+=</span> Si
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Our compressed rep. is 1 bit longer as we encode the swap bit</span>
+</span></span><span style=display:flex><span>    v <span style=color:#fe8019>=</span> <span style=color:#fabd2f>len</span>(σ_chain)
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>assert</span> <span style=color:#fabd2f>len</span>(S) <span style=color:#fe8019>==</span> (v <span style=color:#fe8019>-</span> <span style=color:#d3869b>1</span>) <span style=color:#fe8019>*</span> (f <span style=color:#fe8019>+</span> <span style=color:#d3869b>4</span>) <span style=color:#fe8019>+</span> f <span style=color:#fe8019>+</span> <span style=color:#d3869b>1</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>return</span> S
+</span></span></code></pre></div><h2 id=decompression>Decompression</h2><p>With the additional sign-bit and normalisation which we applied during compression, the
+process of decompression follows the algorithm given in the SQISign paper pretty closely.
+We repeat it here for completeness.</p><ol><li>Take the given bitstring $S$ and compute the swap bit $s_0$, the integers $S_i$ to compute
+the kernels and the integers $s_i$ to compute orthogonal points.</li><li>Given the public key $E_A$, compute a torsion basis $E_A[2^f] = \langle R_1, Q_1 \rangle$.
+If $s_0 = 1$, set $R_1, Q_1 = Q_1, R_1$.</li><li><strong>Loop</strong> for $i \in \{ 1,\ldots,v-1 \}$:<ol><li>Compute the kernel $K_i = R_i + [S_i] Q_i$ and compute the isogeny $\sigma_i : E_i \to E_i / \langle K_i \rangle$.</li><li>Compute $Q_{i+1} = \sigma_i(Q_i)$, which by construction is orthogonal to $K_i$ and has order $2^f$.</li><li>Using the hint $s_i$ compute the point $R_{i+1}$ orthogonal to $Q_{i+1}$.</li></ol></li><li>Correct the order of the last step: given the step length and degree of $\sigma$, compute the length of the
+final step. Ensure that $R_v, Q_v$ have the correct order by clearing the cofactor.</li><li>Compute $K_v = R_v + [S_v]Q_v$ and the corresponding isogeny $\sigma_v$.</li><li>Compute the composition $\sigma = \sigma_v \circ \cdots \circ \sigma_1$.</li><li>Compute the isomorphism from the codomain of $\sigma$ to $E_2$. Post compose with this isomorphism
+to ensure that $\sigma : E_A \to E_2$.</li></ol><p>As we have encoded the swap in $s_0$ and computed all the isomorphisms during compression, then there
+are no additional checks or worries. This isogeny can now be processed and verified to complete SQISign.</p><p>A SageMath implementation of the above is as follows:</p><div class=highlight><pre tabindex=0 style=color:#ebdbb2;background-color:#282828;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=display:flex><span><span style=color:#fe8019>def</span> <span style=color:#fabd2f>decompression</span>(E_start, E_end, S, l, f, σ_length):
+</span></span><span style=display:flex><span>    <span style=color:#b8bb26>&#34;&#34;&#34;
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    Given a bitstring:
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    S = swap_bit || S1 || s2 || S2 || ... || sv || Sv
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    Compute the isogeny σ : E_start → E_end of degree l^σ_length isogeny
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    &#34;&#34;&#34;</span>
+</span></span><span style=display:flex><span>    swap_bit, dlogs, hints <span style=color:#fe8019>=</span> bitstring_to_data(S, f)
+</span></span><span style=display:flex><span>    D <span style=color:#fe8019>=</span> l<span style=color:#fe8019>**</span>f
+</span></span><span style=display:flex><span>    Ri, Qi <span style=color:#fe8019>=</span> torsion_basis(E_start, D, canonical<span style=color:#fe8019>=</span><span style=color:#fe8019>True</span>)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>if</span> swap_bit <span style=color:#fe8019>==</span> <span style=color:#d3869b>1</span>:
+</span></span><span style=display:flex><span>        Qi, Ri <span style=color:#fe8019>=</span> Ri, Qi
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    σ_factors <span style=color:#fe8019>=</span> []
+</span></span><span style=display:flex><span>    Ei <span style=color:#fe8019>=</span> E_start
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>for</span> Si, hint <span style=color:#fe8019>in</span> <span style=color:#fabd2f>zip</span>(dlogs, hints):
+</span></span><span style=display:flex><span>        Ki <span style=color:#fe8019>=</span> Ri <span style=color:#fe8019>+</span> Si <span style=color:#fe8019>*</span> Qi
+</span></span><span style=display:flex><span>        σi <span style=color:#fe8019>=</span> EllipticCurveIsogenyFactored(Ei, Ki, order<span style=color:#fe8019>=</span>D)
+</span></span><span style=display:flex><span>        σ_factors<span style=color:#fe8019>.</span>append(σi)
+</span></span><span style=display:flex><span>        Ei <span style=color:#fe8019>=</span> σi<span style=color:#fe8019>.</span>codomain()
+</span></span><span style=display:flex><span>        Qi <span style=color:#fe8019>=</span> σi(Qi)
+</span></span><span style=display:flex><span>        Ri, _ <span style=color:#fe8019>=</span> compute_R(Ei, Qi, D, hint<span style=color:#fe8019>=</span>hint)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Compute the last step length, ensure that</span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Qv, Rv have the desired order</span>
+</span></span><span style=display:flex><span>    last_step_length <span style=color:#fe8019>=</span> σ_length <span style=color:#fe8019>%</span> f
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>if</span> last_step_length <span style=color:#fe8019>!=</span> <span style=color:#d3869b>0</span>:
+</span></span><span style=display:flex><span>        cofactor <span style=color:#fe8019>=</span> D <span style=color:#fe8019>//</span> l<span style=color:#fe8019>**</span>last_step_length
+</span></span><span style=display:flex><span>        Ri <span style=color:#fe8019>=</span> cofactor <span style=color:#fe8019>*</span> Ri
+</span></span><span style=display:flex><span>        Qi <span style=color:#fe8019>=</span> cofactor <span style=color:#fe8019>*</span> Qi
+</span></span><span style=display:flex><span>        D <span style=color:#fe8019>=</span> l<span style=color:#fe8019>**</span>last_step_length
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Compute the last isogeny, σv</span>
+</span></span><span style=display:flex><span>    Si <span style=color:#fe8019>=</span> dlogs[<span style=color:#fe8019>-</span><span style=color:#d3869b>1</span>]
+</span></span><span style=display:flex><span>    Ki <span style=color:#fe8019>=</span> Ri <span style=color:#fe8019>+</span> Si <span style=color:#fe8019>*</span> Qi
+</span></span><span style=display:flex><span>    σi <span style=color:#fe8019>=</span> EllipticCurveIsogenyFactored(Ei, Ki, order<span style=color:#fe8019>=</span>D)
+</span></span><span style=display:flex><span>    σ_factors<span style=color:#fe8019>.</span>append(σi)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Compose isogenies to obtain σ</span>
+</span></span><span style=display:flex><span>    σ <span style=color:#fe8019>=</span> EllipticCurveHom_composite<span style=color:#fe8019>.</span>from_factors(σ_factors)
+</span></span><span style=display:flex><span>    Eσ <span style=color:#fe8019>=</span> σ<span style=color:#fe8019>.</span>codomain()
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Use an isomorphism to ensure the codomain of σ is E_end</span>
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>assert</span> Eσ<span style=color:#fe8019>.</span>is_isomorphic(
+</span></span><span style=display:flex><span>        E_end
+</span></span><span style=display:flex><span>    ), <span style=color:#b8bb26>&#34;The isogeny σ does not end at a curve isomorphic to E_end&#34;</span>
+</span></span><span style=display:flex><span>    iso <span style=color:#fe8019>=</span> Eσ<span style=color:#fe8019>.</span>isomorphism_to(E_end)
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>return</span> iso <span style=color:#fe8019>*</span> σ
+</span></span></code></pre></div><p><a href=#top>Back to Top</a></p></article></div><div class=flex-menu><div class=menu-header-mobile>Contents</div><div class=page-list><div class=menu-header>Contents</div><div class=contents><a href=/>Introduction</a></div><div class=contents><a href=/posts/overview/>Overview</a></div><div class=contents><a href=/posts/cyclic-ideals/>Working with Cyclic Ideals</a></div><div class=contents><a href=/posts/up-to-iso/>Correct up to Isomorphism</a></div><div class=contents><a href=/posts/pushforwards/>Pushforwards and Pullbacks</a></div><div class=contents><a href=/posts/klpt-bounds/>Estimating Bounds for KLPT</a></div><div class=contents><a href=/posts/prime-ideal/>Equivalent Prime Norm Ideals</a></div><div class=contents><a href=/posts/strong-approximation-lattice/>Strong Approximation Lattice Trick</a></div><div class=contents><a href=/posts/ideal-kernel/>Between Kernels and Ideals</a></div><div class=contents><a href=/posts/ideal-to-isogeny/>Computing Isogenies from Ideals</a></div><div class=contents><a href=/posts/ideal-to-isogeny-subroutines/>Subroutines when Computing Isogenies from Ideals</a></div><div class=contents><a href=/posts/meet-in-the-middle/>Meet in the Middle Isogenies</a></div><div class=contents><a href=/posts/small-steps/>Small Steps from Curves with Small Endomorphisms</a></div><div class=contents><a href=/posts/compression/>Modifying Compression</a></div><div class=contents><a href=/posts/future-work/>Future Work</a></div></div></div></div></main></div></body><footer><div class=footer-left><div class=footer-title>Learning to SQI<br><em>Implementing SQISign in SageMath</em></div><div class=footer-authors>Maria Corte-Real Santos,
+Giacomo Pope</div></div><div class=footer-right><a href=https://github.com/jack4818/SQISign-SageMath><img class=social-link alt=GitHub src=/images/github.svg></a></div></footer></html>

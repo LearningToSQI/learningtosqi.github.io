@@ -1,0 +1,268 @@
+<!doctype html><html lang=en-us><head><meta charset=utf-8><meta http-equiv=x-ua-compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1"><meta name=format-detection content="telephone=no"><meta name=description content="During IdealToIsogenySmallFromKLPT(), two isogenies $\psi_1 : E_3 \to E_5$, and $\psi_2 : E_\psi \to E_6$ are computed. The codomains of these isogenies are separated by an unknown degree $\ell^\Delta$ isogeny $\eta: E_5 \to E_6$. To compute the output of the function IdealToIsogenySmallFromKLPT(), the isogeny $\eta$ must first be recovered through brute force.
+The SQISign paper recommends implementing this as a meet in the middle algorithm which will have complexity $O(\sqrt{\ell^{\Delta}})$. This page details our implementation of this algorithm."><title>Meet in the Middle Isogenies</title><meta name=description content="A SageMath implementation of SQISign"><link rel=canonical href=https://learningtosqi.github.io><meta property="og:type" content="website"><meta property="og:title" content="Learning to SQI | Meet in the Middle Isogenies"><meta property="og:description" content="A SageMath implementation of SQISign"><meta property="og:url" content="https://learningtosqi.github.io/"><meta property="og:site_name" content="Learning to SQI | Meet in the Middle Isogenies"><meta property="og:image" content="/images/banner.png"><meta name=twitter:card content="summary_large_image"><meta name=twitter:title content="Learning to SQI | Meet in the Middle Isogenies"><meta name=twitter:description content="A SageMath implementation of SQISign"><meta name=twitter:site content="https://learningtosqi.github.io"><meta name=twitter:image content="/images/banner.png"><link rel=apple-touch-icon sizes=180x180 href=/favicon/apple-touch-icon.png><link rel=icon type=image/png sizes=32x32 href=/favicon/favicon-32x32.png><link rel=icon type=image/png sizes=16x16 href=/favicon/favicon-16x16.png><link rel=manifest href=/favicon/site.webmanifest><link rel=mask-icon href=f/avicon/safari-pinned-tab.svg color=#0017f5><link rel="shortcut icon" href=/favicon/favicon.ico><meta name=msapplication-TileColor content="#00aba9"><meta name=msapplication-config content="/favicon/browserconfig.xml"><meta name=theme-color content="#ffffff"><link rel=preconnect href=https://fonts.googleapis.com><link rel=preconnect href=https://fonts.gstatic.com crossorigin><link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,300;0,500;1,300&display=swap" rel=stylesheet><link rel=stylesheet href=//cdn.jsdelivr.net/npm/hack-font@3.3.0/build/web/hack.css><link rel=stylesheet href=/css/main.7bd2600936685e5cc7c0ae3b91978cfe3727b0609b2e43f94a050f2d2c922dbb5c196ba8242b7233074547a13c912b1bdc9086eca139f9a2f0aab829dd9e605f.css integrity="sha512-e9JgCTZoXlzHwK47kZeM/jcnsGCbLkP5SgUPLSySLbtcGWuoJCtyMwdFR6E8kSsb3JCG7KE5+aLwqrgp3Z5gXw=="><script>MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]],processEscapes:!0,processEnvironments:!0,macros:{phi:"\\varphi",End:"\\textrm{End}",Nrd:"\\textrm{Nrd}",OO:"\\mathcal{O}",BB:"\\mathcal{B}_{p, \\infty}",NN:"\\mathcal{N}",TT:"\\mathcal{T}",ZZ:"\\mathbb{Z}",QQ:"\\mathbb{Q}",FF:"\\mathbb{F}"}},options:{skipHtmlTags:["script","noscript","style","textarea","pre"]}},window.addEventListener("load",e=>{document.querySelectorAll("mjx-container").forEach(function(e){e.parentElement.classList+="has-jax"})})</script><script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+<script id=MathJax-script async src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js></script></head><body a=auto><div class=wrapper><header><h1 class=title-header><a href=/>Learning to SQI</a></h1><h2 class=alt-title>Implementing SQISign in SageMath</h2><div class=authors>Maria Corte-Real Santos,
+Giacomo Pope</div></header><main class=page-content aria-label=Content><div class=flex-wrapper><div class=flex-content><article><h1>Meet in the Middle Isogenies</h1><p>During <code>IdealToIsogenySmallFromKLPT()</code>, two isogenies $\psi_1 : E_3 \to E_5$,
+and $\psi_2 : E_\psi \to E_6$ are computed. The codomains of these isogenies
+are separated by an unknown
+degree $\ell^\Delta$ isogeny $\eta: E_5 \to E_6$. To compute the output
+of the function <code>IdealToIsogenySmallFromKLPT()</code>, the isogeny $\eta$
+must first be recovered through brute force.</p><p>The SQISign paper recommends implementing this as a meet in the middle
+algorithm which will have complexity $O(\sqrt{\ell^{\Delta}})$.
+This page details our implementation of this algorithm. Although the meet in
+the middle search is not the bottleneck of <code>IdealToIsogenySmallFromKLPT()</code>,
+we are interested in optimising this computation as it has utility outside of
+the context of SQISign.</p><p>As implemented, we have assumed that both $\ell$, and $\Delta$ are small, so
+that we are unconcerned with memory management for the algorithm.</p><h2 id=overview>Overview</h2><p>Assume we are given two curves $E_1$, $E_2$ which are connected by an unknown
+isogeny of known degree $\ell^\Delta$.
+The general idea of the meet in the middle algorithm is to enumerate all possible
+walks in the supersingular isogeny graph of length $\Delta/2$ starting from both $E_1$
+and $E_2$. Then, we look at the intersection of the nodes at the end of each graph
+to discover the middle curve $E_m$. Given the graphs, it is efficient to compute
+the walk from $E_i$
+to $E_m$. Concatenating these paths together gives the isogeny path from
+$E_1$ to $E_2$, and from this, we can compute the unknown isogeny.</p><figure><img src=/images/graphs.png alt="A pair of supersingular isogeny graphs, illustrating how the meet in the middle search works."><figcaption><p><strong>Figure 1</strong>: Supersingular isogeny graphs from both $E_1$ and $E_2$. The middle curve $E_m$ is found at level three for each graph.</p></figcaption></figure><figure><img src=/images/path.png alt="A path from E1 to E2 via the middle curve EM" width=450px><figcaption><p><strong>Figure 2</strong>: The derived path between $E_1$ and $E_2$ via the middle curve $E_m$, which was found in the meet in the middle search.</p></figcaption></figure><p>The algorithm can be broken down into the following steps:</p><ol><li>Compute a graph $G_1$ with $j$-invariants as nodes and $\ell$-isogenies as
+edges. The root of the graph will be $j_1 = j(E_1)$, from which we take walks
+of length $e_1 = \lfloor \Delta/2 \rfloor$ to obtain the middle $j$-invariants
+at level $e_1$.</li><li>Compute a second graph $G_2$ with $j_2 = j(E_2)$ as the root and depth
+$e_2=\Delta-e_1$.</li><li>Set $j_m$ to be the intersection $G_1[e_1] \cap G_2[e_2]$. If the intersection
+is empty, terminate the algorithm with an error that no isogeny can be found.
+Note that we can compute this intersection as we generate $G_2$ and terminate
+as soon as $j_m$ has been discovered.</li><li>Compute a path $p_i$ from $j_i$ to $j_m$ for each graph $G_i$. Concatenate
+the paths to compute a path $p$ which walks from $j_1$ to $j_2$.</li><li>For each step of the path, we now want to compute the corresponding $\ell$-isogeny.
+The path starts on node $j^{(1)} = j_1$, which corresponds to $E^{(1)} = E_1$.
+For each step in the path $p$, brute force
+all $\ell$-isogenies from $E^{(i)}$ until an isogeny is found from
+$\phi_i : E^{(i)} \to E^{(i+1)}$ with $j(E^{(i+1)}) = j^{(i+1)}$. Store $\phi_i$.</li><li>Compose all $\ell$-isogenies $\phi_i$ to compute the $\ell^{\Delta}$-isogeny
+$\phi = \phi_\Delta \circ \ldots \circ \phi_1$.</li><li>As this chain is derived from the $j$-invariants, we must ensure that the
+codomain of $\phi$ is $E_2$ by finally post-composing with the correct isomorphism.</li></ol><p>The code which implements this is available at
+<a href=https://github.com/LearningToSQI/SQISign-SageMath/blob/main/mitm.py><code>mitm.py</code></a>
+and is commented throughout. The remainder of this page looks at some of the
+implementation choices we made for each step outlined above.</p><h2 id=computing-the-isogeny-graphs>Computing the isogeny graphs</h2><p>As implemented, the data structure for the graph is crude. If someone reading
+this knows of something more efficient, we would love to hear from you.</p><p>Each level in the graph is a dictionary with nodes as keys and parent nodes
+as values. This structure was picked such that given a node at level $i$, we can efficiently
+find the parent node at level $(i-1)$ and work backwards towards the root.
+The graph itself is simply a list of the level dictionaries, with the root
+at the zero-index and middle values at the end.</p><p>The graph itself is built using a depth-first search. This has no bearing on
+the computation of $G_1$, for which we must compute the entire graph, but it means
+we compute as few nodes as possible for $G_2$ while searching for the middle
+j-invariant.</p><h3 id=computing-neighbouring-j-invariants>Computing neighbouring j-invariants</h3><p>To compute the node values, the naïve method would be to compute all $\ell$-isogenies
+from the starting curve and then store the $j$-invariant of the codomain
+as the node data for each step. However, we can compute the neighbouring
+$j$-invariants without computing isogenies, by instead computing roots of a
+special polynomial: the modular polynomial.</p><p>The modular polynomial $\Phi_{\ell}(X,Y)$ has the special property that given
+$j_1 = j(E_1)$, the roots of $\Phi_{\ell}(j_1,Y) \in \mathbb{F}_{q}[Y]$ are
+the $j$-invariants of the elliptic curves which are connected to $E_1$ by a
+cyclic isogeny of degree $\ell$. This means that given a node with $j$-invariant $j^{(i)}$,
+we can compute the $j$-invariants of all neighbouring nodes as the roots of
+$\Phi_{\ell}(j^{(i)},Y)$.</p><p>As our elliptic curves are supersingular,
+all $j$-invariants of curves $\ell$-isogenous to $E^{(i)}$ will be elements
+of $\mathbb{F}_{p^2}$, which means we can work in $\mathbb{F}_{p^2}$ when
+computing roots, even if we are working with curves $E / \mathbb{F}_{p^{2k}}$.</p><p>For the case of SQISign, we have $\ell = 2$ and the modular polynomial
+is given by:</p><p>$$
+\begin{aligned}
+\Phi_2(X,Y) &= X^3 - X^2Y^2 + 1488X^2Y - 162000X^2 + 1488XY^2 \\
+&+ 40773375XY + 8748000000x + Y^3 - 162000Y^2 \\
+&+ 8748000000Y - 157464000000000.
+\end{aligned}
+$$</p><p>For the first node in the graph, all we have is the j-invariant for the
+starting curve, and so we must find all roots of the modular polynomial
+above. We can do this relatively easily in SageMath, however it is not a
+fast computation. The code which implements this is below and should be
+straightforward.</p><div class=highlight><pre tabindex=0 style=color:#ebdbb2;background-color:#282828;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-py data-lang=py><span style=display:flex><span><span style=color:#fe8019>def</span> <span style=color:#fabd2f>generic_modular_polynomial_roots</span>(j1):
+</span></span><span style=display:flex><span>    <span style=color:#b8bb26>&#34;&#34;&#34;
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    Compute the roots to the Modular polynomial
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    Φ2, setting x to be the input j-invariant.
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    &#34;&#34;&#34;</span>
+</span></span><span style=display:flex><span>    R <span style=color:#fe8019>=</span> PolynomialRing(j1<span style=color:#fe8019>.</span>parent(), <span style=color:#b8bb26>&#34;y&#34;</span>)
+</span></span><span style=display:flex><span>    y <span style=color:#fe8019>=</span> R<span style=color:#fe8019>.</span>gens()[<span style=color:#d3869b>0</span>]
+</span></span><span style=display:flex><span>    Φ2 <span style=color:#fe8019>=</span> (
+</span></span><span style=display:flex><span>        j1<span style=color:#fe8019>**</span><span style=color:#d3869b>3</span> <span style=color:#fe8019>-</span> j1<span style=color:#fe8019>**</span><span style=color:#d3869b>2</span> <span style=color:#fe8019>*</span> y<span style=color:#fe8019>**</span><span style=color:#d3869b>2</span> <span style=color:#fe8019>+</span> <span style=color:#d3869b>1488</span> <span style=color:#fe8019>*</span> j1<span style=color:#fe8019>**</span><span style=color:#d3869b>2</span> <span style=color:#fe8019>*</span> y
+</span></span><span style=display:flex><span>        <span style=color:#fe8019>-</span> <span style=color:#d3869b>162000</span> <span style=color:#fe8019>*</span> j1<span style=color:#fe8019>**</span><span style=color:#d3869b>2</span> <span style=color:#fe8019>+</span> <span style=color:#d3869b>1488</span> <span style=color:#fe8019>*</span> j1 <span style=color:#fe8019>*</span> y<span style=color:#fe8019>**</span><span style=color:#d3869b>2</span>
+</span></span><span style=display:flex><span>        <span style=color:#fe8019>+</span> <span style=color:#d3869b>40773375</span> <span style=color:#fe8019>*</span> j1 <span style=color:#fe8019>*</span> y <span style=color:#fe8019>+</span> <span style=color:#d3869b>8748000000</span> <span style=color:#fe8019>*</span> j1
+</span></span><span style=display:flex><span>        <span style=color:#fe8019>+</span> y<span style=color:#fe8019>**</span><span style=color:#d3869b>3</span> <span style=color:#fe8019>-</span> <span style=color:#d3869b>162000</span> <span style=color:#fe8019>*</span> y<span style=color:#fe8019>**</span><span style=color:#d3869b>2</span> <span style=color:#fe8019>+</span> <span style=color:#d3869b>8748000000</span> <span style=color:#fe8019>*</span> y
+</span></span><span style=display:flex><span>        <span style=color:#fe8019>-</span> <span style=color:#d3869b>157464000000000</span>
+</span></span><span style=display:flex><span>    )
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>return</span> f<span style=color:#fe8019>.</span>roots(multiplicities<span style=color:#fe8019>=</span><span style=color:#fe8019>False</span>)
+</span></span></code></pre></div><p>For every subsequent node we can take inspiration from the paper
+<a href=http://eprint.iacr.org/2021/1488>Accelerating the Delfs–Galbraith algorithm with fast subfield root detection</a>
+and directly compute a quadratic polynomial using that we know two roots: the current
+j-invariant as well as the j-invariant of the parent node.</p><p>Explicitly, given the current j-invariant $j_c$ and the previous $j_p$
+we can write the modular polynomial as a univariate polynomial</p><p>$$
+f(X) = X^2 + \alpha X + \beta.
+$$</p><p>With the coefficients given by:</p><p>$$
+\begin{aligned}
+\alpha &= -j_c^2 + 1488 j_c + j_p - 162000, \\
+\beta &= j_p^2 - j_c^2 j_p + 1488 (j_c^2 + j_c j_p) \\
+&+ 40773375 j_c - 162000 j_p + 8748000000.
+\end{aligned}
+$$</p><p>Solving a quadratic polynomial is easy (we learn this in school) using the
+quadratic formula. In practice, we find that solving for the last two roots
+is about ten times faster than solving the generic modular polynomial. When
+the parent node value is known, we supply it as the optional parameter <code>j_prev</code>.</p><p>This is not only useful for the efficient recovery of roots, but we
+must also not return this root (in the case of multiplicities) as a new node for the
+next level, as this would result in backtracking. Separating out the code for the
+quadratic and general cases, the function to derive node values is very simple:</p><div class=highlight><pre tabindex=0 style=color:#ebdbb2;background-color:#282828;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-py data-lang=py><span style=display:flex><span><span style=color:#fe8019>def</span> <span style=color:#fabd2f>find_j_invs</span>(j1, j_prev<span style=color:#fe8019>=</span><span style=color:#fe8019>None</span>):
+</span></span><span style=display:flex><span>    <span style=color:#b8bb26>&#34;&#34;&#34;
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    Compute the j-invariants of the elliptic
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    curves 2-isogenous to the elliptic curve
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    with j(E) = j1
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    &#34;&#34;&#34;</span>
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>if</span> j_prev:
+</span></span><span style=display:flex><span>        roots <span style=color:#fe8019>=</span> quadratic_modular_polynomial_roots(j1, j_prev)
+</span></span><span style=display:flex><span>        
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>else</span>:
+</span></span><span style=display:flex><span>        roots <span style=color:#fe8019>=</span> generic_modular_polynomial_roots(j1)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Dont include the the previous node to avoid backtracking</span>
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>return</span> [j <span style=color:#fe8019>for</span> j <span style=color:#fe8019>in</span> roots <span style=color:#fe8019>if</span> j <span style=color:#fe8019>!=</span> j_prev]
+</span></span></code></pre></div><p>We note that SageMath has direct access to the modular polynomials with
+the function <code>ClassicalModularPolynomialDatabase()</code>,
+but this does not come as standard and requires the user
+to install additional packages. This is easy when you built SageMath from
+source, but for the pre-built binaries which are downloaded from package managers,
+this becomes more complicated. Because of this, we decided to only support $\ell=2$
+and hard code the modular polynomial into the code.</p><p>With the isogeny graph data structure and an efficient way to compute the
+neighbouring nodes with the modular polynomial, the rest of this code was
+fairly straightforward. The implementation of the construction of the
+graph is in the function <code>j_invariant_isogeny_graph()</code>.</p><h3 id=computing-the-path-from-the-middle>Computing the path from the middle</h3><p>Due to the way we structured the isogeny graph, finding the path from
+the derived middle $j$-invariant to the root is elementary. Each node in
+a given level has the parent node in the level below as its value in the
+dictionary. The path can be recovered by performing one dictionary look up
+for each level in the isogeny graph.</p><div class=highlight><pre tabindex=0 style=color:#ebdbb2;background-color:#282828;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=display:flex><span><span style=color:#fe8019>def</span> <span style=color:#fabd2f>j_invariant_path</span>(isogeny_graph, j1, j2, e, reversed_path<span style=color:#fe8019>=</span><span style=color:#fe8019>False</span>):
+</span></span><span style=display:flex><span>    <span style=color:#b8bb26>&#34;&#34;&#34;
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    Compute a path through a graph with root j1 and
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    last child j2
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    &#34;&#34;&#34;</span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Make sure the end node is where we expect</span>
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>assert</span> j1 <span style=color:#fe8019>in</span> isogeny_graph[<span style=color:#d3869b>0</span>]
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>assert</span> j2 <span style=color:#fe8019>in</span> isogeny_graph[e]
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    j_path <span style=color:#fe8019>=</span> [j2]
+</span></span><span style=display:flex><span>    j <span style=color:#fe8019>=</span> j2
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>for</span> k <span style=color:#fe8019>in</span> <span style=color:#fabd2f>reversed</span>(<span style=color:#fabd2f>range</span>(<span style=color:#d3869b>1</span>, e <span style=color:#fe8019>+</span> <span style=color:#d3869b>1</span>)):
+</span></span><span style=display:flex><span>        j <span style=color:#fe8019>=</span> isogeny_graph[k][j]
+</span></span><span style=display:flex><span>        j_path<span style=color:#fe8019>.</span>append(j)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>if</span> <span style=color:#fe8019>not</span> reversed_path:
+</span></span><span style=display:flex><span>        j_path<span style=color:#fe8019>.</span>reverse()
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>return</span> j_path
+</span></span></code></pre></div><p>We allow the optional boolean <code>reversed_path</code>. As the path is constructed,
+it is naturally in reversed order. As we later want the path $j_m \to j_2$ rather
+than $j_2 \to j_m$, it seemed natural to allow skipping the reversal rather
+than reversing the list twice.</p><h2 id=computing-the-isogeny-from-the-j-invariant-path>Computing the isogeny from the j-invariant path</h2><p>Given the starting curve $E_1$ and a path of $j$-invariants with
+the first element being $j(E_1)$, the isogeny $\phi$ corresponding
+to this path can be computed by enumerating all $\ell$-isogenies
+step-by-step. This was explained in the outline and is fairly
+straightforward given a code snippet:</p><div class=highlight><pre tabindex=0 style=color:#ebdbb2;background-color:#282828;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=display:flex><span><span style=color:#fe8019>def</span> <span style=color:#fabd2f>isogeny_from_j_invariant_path</span>(E1, j_invariant_path, l):
+</span></span><span style=display:flex><span>    <span style=color:#b8bb26>&#34;&#34;&#34;
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    Given a starting curve E1 and a path of j-invariants
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    of elliptic curves l-isogenous to its neighbour compute
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    an isogeny ϕ with domain E1 and codomain En with
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    j(En) equal to the last element of the path
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    &#34;&#34;&#34;</span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Check we&#39;re starting correctly</span>
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>assert</span> E1<span style=color:#fe8019>.</span>j_invariant() <span style=color:#fe8019>==</span> j_invariant_path[<span style=color:#d3869b>0</span>]
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># We will compute isogenies linking</span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Ei, Ej step by step</span>
+</span></span><span style=display:flex><span>    ϕ_factors <span style=color:#fe8019>=</span> []
+</span></span><span style=display:flex><span>    Ei <span style=color:#fe8019>=</span> E1
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>for</span> j_step <span style=color:#fe8019>in</span> j_invariant_path[<span style=color:#d3869b>1</span>:]:
+</span></span><span style=display:flex><span>        <span style=color:#928374;font-style:italic># Compute the isogeny between nodes</span>
+</span></span><span style=display:flex><span>        ϕij <span style=color:#fe8019>=</span> BruteForceSearchJinv(Ei, j_step, l, <span style=color:#d3869b>1</span>)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#928374;font-style:italic># Store the factor</span>
+</span></span><span style=display:flex><span>        ϕ_factors<span style=color:#fe8019>.</span>append(ϕij)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#928374;font-style:italic># Update the curve Ei</span>
+</span></span><span style=display:flex><span>        Ei <span style=color:#fe8019>=</span> ϕij<span style=color:#fe8019>.</span>codomain()
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Composite isogeny from factors</span>
+</span></span><span style=display:flex><span>    ϕ <span style=color:#fe8019>=</span> EllipticCurveHom_composite<span style=color:#fe8019>.</span>from_factors(ϕ_factors)
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>return</span> ϕ
+</span></span></code></pre></div><h3 id=enumerating-all-isogenies>Enumerating all isogenies</h3><p>Most of the hard work of computing the isogeny from the path is performed
+by <code>BruteForceSearchJinv()</code>, which is responsible for enumerating all
+isogenies of degree $\ell$ from the curve $E_i$.</p><p>We enumerate isogenies by computing kernel generators $K_i$ such that
+$\phi_i : E \to E / \langle K_i \rangle$. As $\ell$ is small, we
+can derive the $x$-coordinates of each of the kernel generators
+$K_i$ by lifting the roots of the $\ell$-th division polynomial.</p><div class=highlight><pre tabindex=0 style=color:#ebdbb2;background-color:#282828;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-py data-lang=py><span style=display:flex><span><span style=color:#fe8019>def</span> <span style=color:#fabd2f>generate_kernels_division_polynomal</span>(E, l):
+</span></span><span style=display:flex><span>    <span style=color:#b8bb26>&#34;&#34;&#34;
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    Generate all kernels which generate cyclic isogenies
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    of degree l from the curve E.
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    Kernel generators are found by computing the roots
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    of the lth division polynomial and lifting these values
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    to points on the elliptic curve.
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    &#34;&#34;&#34;</span>
+</span></span><span style=display:flex><span>    f <span style=color:#fe8019>=</span> E<span style=color:#fe8019>.</span>division_polynomial(l)
+</span></span><span style=display:flex><span>    xs <span style=color:#fe8019>=</span> [x <span style=color:#fe8019>for</span> x, _ <span style=color:#fe8019>in</span> f<span style=color:#fe8019>.</span>roots()]
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>for</span> x <span style=color:#fe8019>in</span> xs:
+</span></span><span style=display:flex><span>        K <span style=color:#fe8019>=</span> E<span style=color:#fe8019>.</span>lift_x(x)
+</span></span><span style=display:flex><span>        K<span style=color:#fe8019>.</span>set_order(l)
+</span></span><span style=display:flex><span>        <span style=color:#fe8019>yield</span> K
+</span></span></code></pre></div><p>From $K_i$ we can efficiently compute $\phi_i$ and we supply
+the optional arguments to the SageMath function <code>EllipticCurveIsogeny</code>
+for the known degree and set the check
+bool to <code>False</code> to help with performance. The correct isogeny
+is found when the codomain of the isogeny has a $j$-invariant
+$j(E^{(i)})$ equal to the target $j$-invariant:</p><div class=highlight><pre tabindex=0 style=color:#ebdbb2;background-color:#282828;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-py data-lang=py><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Snipped from `BruteForceSearchJinv`</span>
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>for</span> K <span style=color:#fe8019>in</span> kernels:
+</span></span><span style=display:flex><span>        ϕ <span style=color:#fe8019>=</span> EllipticCurveIsogeny(E1, K, degree<span style=color:#fe8019>=</span>l, check<span style=color:#fe8019>=</span><span style=color:#fe8019>False</span>)
+</span></span><span style=display:flex><span>        Eϕ <span style=color:#fe8019>=</span> ϕ<span style=color:#fe8019>.</span>codomain()
+</span></span><span style=display:flex><span>        jEϕ <span style=color:#fe8019>=</span> Eϕ<span style=color:#fe8019>.</span>j_invariant()
+</span></span><span style=display:flex><span>        <span style=color:#fe8019>if</span> jEϕ <span style=color:#fe8019>==</span> j2:
+</span></span><span style=display:flex><span>            <span style=color:#fe8019>return</span> ϕ
+</span></span></code></pre></div><p>We note that
+after writing this function, we were made aware of the SageMath function
+<code>E.isogenies_prime_degree(l)</code> which generates all cyclic isogenies of
+degree $l$ from the curve $E$. This appears to be almost as fast as our
+own implementation but we had already written the explicit code,
+so we kept our current implementation.</p><h3 id=fixing-the-end-of-the-path>Fixing the end of the path</h3><p>The isogeny derived from the path is some isogeny $\phi : E_1 \to E_\Delta$
+of degree $\ell^\Delta$ with $j(E_\Delta) = j(E_2)$. To finish the algorithm
+we fix the codomain of $\phi$ such that the ending curve has codomain equal to
+$E_2$.</p><p>This is easy in SageMath thanks to the helper function <code>E1.isomorphism_to(E2)</code>:</p><div class=highlight><pre tabindex=0 style=color:#ebdbb2;background-color:#282828;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-py data-lang=py><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Snipped from `ClawFindingAttack()`</span>
+</span></span><span style=display:flex><span>    ϕ <span style=color:#fe8019>=</span> isogeny_from_j_invariant_path(E1, j_path, l)
+</span></span><span style=display:flex><span>    E2ϕ <span style=color:#fe8019>=</span> ϕ<span style=color:#fe8019>.</span>codomain()
+</span></span><span style=display:flex><span>    iso <span style=color:#fe8019>=</span> E2ϕ<span style=color:#fe8019>.</span>isomorphism_to(E2)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>return</span> iso <span style=color:#fe8019>*</span> ϕ
+</span></span></code></pre></div><h2 id=computing-the-kernel-of-the-unknown-isogeny>Computing the kernel of the unknown isogeny</h2><p>As a last note, we include how to derive the kernel of the isogeny found from
+the meet in the middle algorithm, which is needed to finish the parent algorithm
+<code>IdealToIsogenySmallFromKLPT()</code>.</p><p>The general idea is that for a cyclic isogeny of degree $D$, we first compute the torsion
+basis $E[D] = \langle P, Q \rangle$. As the input isogeny is cyclic, $\ker(\phi)$
+is generated by a single point $K$ of order $D$ such that $\phi(K) = \mathcal{O}$,
+and where $\mathcal{O}$ is the point at infinity of the elliptic curve.</p><p>We can write the kernel generator using our torsion basis: $K = P + [x]Q$
+for some unknown integer $x$. Using that an isogeny is a group homomorphism, we can
+rewrite this as $\phi(K) = \mathcal{O} \Rightarrow \phi(P) = \phi(-[x]Q)$
+and we can recover $x$ by solving the discrete log problem for the image of
+the torsion basis under the action of the isogeny $\phi$.
+As the order of our curve is smooth, the discrete logarithm is computed efficiently.</p><p>This is implemented in the following code:</p><div class=highlight><pre tabindex=0 style=color:#ebdbb2;background-color:#282828;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-py data-lang=py><span style=display:flex><span><span style=color:#fe8019>def</span> <span style=color:#fabd2f>kernel_from_isogeny_prime_power</span>(ϕ):
+</span></span><span style=display:flex><span>    <span style=color:#b8bb26>&#34;&#34;&#34;
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    Given a prime-power degree isogeny ϕ
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    computes a generator of its kernel
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    &#34;&#34;&#34;</span>
+</span></span><span style=display:flex><span>    E <span style=color:#fe8019>=</span> ϕ<span style=color:#fe8019>.</span>domain()
+</span></span><span style=display:flex><span>    D <span style=color:#fe8019>=</span> ϕ<span style=color:#fe8019>.</span>degree()
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Deal with isomorphisms</span>
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>if</span> D <span style=color:#fe8019>==</span> <span style=color:#d3869b>1</span>:
+</span></span><span style=display:flex><span>        <span style=color:#fe8019>return</span> E(<span style=color:#d3869b>0</span>)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Generate a torsion basis of E[D]</span>
+</span></span><span style=display:flex><span>    P, Q <span style=color:#fe8019>=</span> torsion_basis(E, D)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Compute the image of P,Q</span>
+</span></span><span style=display:flex><span>    imP, imQ <span style=color:#fe8019>=</span> ϕ(P), ϕ(Q)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Ensure we can use imQ as a base</span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># for the discrete log</span>
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>if</span> <span style=color:#fe8019>not</span> has_order_D(imQ, D):
+</span></span><span style=display:flex><span>        P, Q <span style=color:#fe8019>=</span> Q, P
+</span></span><span style=display:flex><span>        imP, imQ <span style=color:#fe8019>=</span> imQ, imP
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    x <span style=color:#fe8019>=</span> imQ<span style=color:#fe8019>.</span>discrete_log(<span style=color:#fe8019>-</span>imP)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>return</span> P <span style=color:#fe8019>+</span> x <span style=color:#fe8019>*</span> Q
+</span></span></code></pre></div><p><a href=#top>Back to Top</a></p></article></div><div class=flex-menu><div class=menu-header-mobile>Contents</div><div class=page-list><div class=menu-header>Contents</div><div class=contents><a href=/>Introduction</a></div><div class=contents><a href=/posts/overview/>Overview</a></div><div class=contents><a href=/posts/cyclic-ideals/>Working with Cyclic Ideals</a></div><div class=contents><a href=/posts/up-to-iso/>Correct up to Isomorphism</a></div><div class=contents><a href=/posts/pushforwards/>Pushforwards and Pullbacks</a></div><div class=contents><a href=/posts/klpt-bounds/>Estimating Bounds for KLPT</a></div><div class=contents><a href=/posts/prime-ideal/>Equivalent Prime Norm Ideals</a></div><div class=contents><a href=/posts/strong-approximation-lattice/>Strong Approximation Lattice Trick</a></div><div class=contents><a href=/posts/ideal-kernel/>Between Kernels and Ideals</a></div><div class=contents><a href=/posts/ideal-to-isogeny/>Computing Isogenies from Ideals</a></div><div class=contents><a href=/posts/ideal-to-isogeny-subroutines/>Subroutines when Computing Isogenies from Ideals</a></div><div class=contents><a href=/posts/meet-in-the-middle/>Meet in the Middle Isogenies</a></div><div class=contents><a href=/posts/small-steps/>Small Steps from Curves with Small Endomorphisms</a></div><div class=contents><a href=/posts/compression/>Modifying Compression</a></div><div class=contents><a href=/posts/future-work/>Future Work</a></div></div></div></div></main></div></body><footer><div class=footer-left><div class=footer-title>Learning to SQI<br><em>Implementing SQISign in SageMath</em></div><div class=footer-authors>Maria Corte-Real Santos,
+Giacomo Pope</div></div><div class=footer-right><a href=https://github.com/jack4818/SQISign-SageMath><img class=social-link alt=GitHub src=/images/github.svg></a></div></footer></html>

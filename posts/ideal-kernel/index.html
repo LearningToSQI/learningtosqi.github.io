@@ -1,0 +1,348 @@
+<!doctype html><html lang=en-us><head><meta charset=utf-8><meta http-equiv=x-ua-compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1"><meta name=format-detection content="telephone=no"><meta name=description content="Central to constructive applications of the Deuring correspondence is efficiently converting between equivalent ideals and isogenies. The core of this work is converting between a cyclic ideal $I$ of norm $n(I) = D$ and a kernel generator $K$ of order $D$. This page is dedicated to discussing how to perform these conversions and follows the description of $\textsf{IdealToKernel}$ and $\textsf{KernelToIdeal}$, described by Algorithms 19 and 20 of Leroux&rsquo;s Thesis.
+Although we have attempted to make this page self-contained, we point an interested reader to both the first explicit formulation in [GPS17], and the clear and well motivated discussions from Leroux&rsquo;s Thesis: Section 4."><title>Between Kernels and Ideals</title><meta name=description content="A SageMath implementation of SQISign"><link rel=canonical href=https://learningtosqi.github.io><meta property="og:type" content="website"><meta property="og:title" content="Learning to SQI | Between Kernels and Ideals"><meta property="og:description" content="A SageMath implementation of SQISign"><meta property="og:url" content="https://learningtosqi.github.io/"><meta property="og:site_name" content="Learning to SQI | Between Kernels and Ideals"><meta property="og:image" content="/images/banner.png"><meta name=twitter:card content="summary_large_image"><meta name=twitter:title content="Learning to SQI | Between Kernels and Ideals"><meta name=twitter:description content="A SageMath implementation of SQISign"><meta name=twitter:site content="https://learningtosqi.github.io"><meta name=twitter:image content="/images/banner.png"><link rel=apple-touch-icon sizes=180x180 href=/favicon/apple-touch-icon.png><link rel=icon type=image/png sizes=32x32 href=/favicon/favicon-32x32.png><link rel=icon type=image/png sizes=16x16 href=/favicon/favicon-16x16.png><link rel=manifest href=/favicon/site.webmanifest><link rel=mask-icon href=f/avicon/safari-pinned-tab.svg color=#0017f5><link rel="shortcut icon" href=/favicon/favicon.ico><meta name=msapplication-TileColor content="#00aba9"><meta name=msapplication-config content="/favicon/browserconfig.xml"><meta name=theme-color content="#ffffff"><link rel=preconnect href=https://fonts.googleapis.com><link rel=preconnect href=https://fonts.gstatic.com crossorigin><link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,300;0,500;1,300&display=swap" rel=stylesheet><link rel=stylesheet href=//cdn.jsdelivr.net/npm/hack-font@3.3.0/build/web/hack.css><link rel=stylesheet href=/css/main.7bd2600936685e5cc7c0ae3b91978cfe3727b0609b2e43f94a050f2d2c922dbb5c196ba8242b7233074547a13c912b1bdc9086eca139f9a2f0aab829dd9e605f.css integrity="sha512-e9JgCTZoXlzHwK47kZeM/jcnsGCbLkP5SgUPLSySLbtcGWuoJCtyMwdFR6E8kSsb3JCG7KE5+aLwqrgp3Z5gXw=="><script>MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]],processEscapes:!0,processEnvironments:!0,macros:{phi:"\\varphi",End:"\\textrm{End}",Nrd:"\\textrm{Nrd}",OO:"\\mathcal{O}",BB:"\\mathcal{B}_{p, \\infty}",NN:"\\mathcal{N}",TT:"\\mathcal{T}",ZZ:"\\mathbb{Z}",QQ:"\\mathbb{Q}",FF:"\\mathbb{F}"}},options:{skipHtmlTags:["script","noscript","style","textarea","pre"]}},window.addEventListener("load",e=>{document.querySelectorAll("mjx-container").forEach(function(e){e.parentElement.classList+="has-jax"})})</script><script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+<script id=MathJax-script async src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js></script></head><body a=auto><div class=wrapper><header><h1 class=title-header><a href=/>Learning to SQI</a></h1><h2 class=alt-title>Implementing SQISign in SageMath</h2><div class=authors>Maria Corte-Real Santos,
+Giacomo Pope</div></header><main class=page-content aria-label=Content><div class=flex-wrapper><div class=flex-content><article><h1>Between Kernels and Ideals</h1><p>Central to constructive applications of the Deuring correspondence is
+efficiently converting between equivalent ideals and isogenies. The core of this work
+is converting between a cyclic ideal $I$ of norm $n(I) = D$
+and a kernel generator $K$ of order $D$. This page is dedicated to discussing how to perform
+these conversions and follows the description of $\textsf{IdealToKernel}$ and $\textsf{KernelToIdeal}$,
+described by Algorithms 19 and 20 of
+<a href=https://www.lix.polytechnique.fr/Labo/Antonin.LEROUX/manuscrit_these.pdf>Leroux&rsquo;s Thesis</a>.</p><p>Although we have attempted to make this page self-contained, we point an interested
+reader to both the first explicit
+formulation in <a href=https://eprint.iacr.org/2016/1154>[GPS17]</a>,
+and the clear and well motivated discussions from
+<a href=https://www.lix.polytechnique.fr/Labo/Antonin.LEROUX/manuscrit_these.pdf>Leroux&rsquo;s Thesis: Section 4.2</a>, as well as the recent publication
+<a href=https://eprint.iacr.org/2023/106>[EPSV23]</a>.</p><h2 id=evaluating-endomorphisms>Evaluating endomorphisms</h2><p>Central to converting between kernel generators and ideals
+is being able to compute the isomorphism $\xi : \End(E) \to \OO$ and
+subsequently using this to evaluate the action of some algebra element
+$\alpha \in \BB$ on points $P \in E$ via the mapping $\xi^{-1}(\alpha)(P)$.</p><p>The construction of the isomorphism comes from our knowledge of the basis
+of the maximal order $\OO_0$ and the endomorphism ring of the special
+curve $E_0$:</p><p>$$
+\begin{aligned}
+\OO_0 &= \left\langle 1, i, \frac{i + j}{2}, \frac{1 + k}{2} \right\rangle, \\
+\End(E_0) &= \left\langle 1, \iota, \frac{\iota + \pi}{2}, \frac{1 + \iota \pi}{2} \right\rangle, \\
+\end{aligned}
+$$</p><p>where $\BB = \langle 1, i, j, k \rangle$, and $\iota$ and $\pi$ are the twisting
+and Frobenius endomorphisms respectively:</p><p>$$
+\iota : (x,y) \mapsto (-x, \sqrt{-1} y), \qquad \pi : (x,y) \mapsto (x^p,y^p).
+$$</p><p>Concretely, these endomorphisms can be evaluated on any point $P \in E_0$ with the
+following functions:</p><div class=highlight><pre tabindex=0 style=color:#ebdbb2;background-color:#282828;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=display:flex><span><span style=color:#928374;font-style:italic># Global values</span>
+</span></span><span style=display:flex><span>p <span style=color:#fe8019>=</span> E0<span style=color:#fe8019>.</span>base()<span style=color:#fe8019>.</span>characteristic()
+</span></span><span style=display:flex><span>sqrt_minus_one <span style=color:#fe8019>=</span> E0<span style=color:#fe8019>.</span>base()(<span style=color:#fe8019>-</span><span style=color:#d3869b>1</span>)<span style=color:#fe8019>.</span>sqrt(<span style=color:#fabd2f>all</span><span style=color:#fe8019>=</span><span style=color:#fe8019>True</span>)[<span style=color:#d3869b>0</span>] <span style=color:#928374;font-style:italic># Deterministic</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#fe8019>def</span> <span style=color:#fabd2f>E01</span>(P):
+</span></span><span style=display:flex><span>    <span style=color:#b8bb26>&#34;&#34;&#34;
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    Identity map, does nothing
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    &#34;&#34;&#34;</span>
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>return</span> P
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#fe8019>def</span> <span style=color:#fabd2f>E0ι</span>(P):
+</span></span><span style=display:flex><span>    <span style=color:#b8bb26>&#34;&#34;&#34;
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    Returns ι(P) = (-x, √-1 y)
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    &#34;&#34;&#34;</span>
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>return</span> E0(<span style=color:#fe8019>-</span>P[<span style=color:#d3869b>0</span>], sqrt_minus_one <span style=color:#fe8019>*</span> P[<span style=color:#d3869b>1</span>])
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#fe8019>def</span> <span style=color:#fabd2f>E0π</span>(P):
+</span></span><span style=display:flex><span>    <span style=color:#b8bb26>&#34;&#34;&#34;
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    Returns π(P) = (X^p, Y^p, Z^p)
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    &#34;&#34;&#34;</span>
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>return</span> E0(P[<span style=color:#d3869b>0</span>] <span style=color:#fe8019>**</span> p, P[<span style=color:#d3869b>1</span>] <span style=color:#fe8019>**</span> p, P[<span style=color:#d3869b>2</span>] <span style=color:#fe8019>**</span> p)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#fe8019>def</span> <span style=color:#fabd2f>E0ιπ</span>(P):
+</span></span><span style=display:flex><span>    <span style=color:#b8bb26>&#34;&#34;&#34;
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    Returns ιπ(P) = (-X^p, √-1 Y^p, Z^p)
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    &#34;&#34;&#34;</span>
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>return</span> E0(<span style=color:#fe8019>-</span>P[<span style=color:#d3869b>0</span>] <span style=color:#fe8019>**</span> p, sqrt_minus_one <span style=color:#fe8019>*</span> P[<span style=color:#d3869b>1</span>] <span style=color:#fe8019>**</span> p, P[<span style=color:#d3869b>2</span>] <span style=color:#fe8019>**</span> p)
+</span></span></code></pre></div><p>With the endomorphisms implemented, we now need to look at how we can map algebra elements
+to endomorphisms. Generically, any element $\alpha \in \BB$ can be written in the following
+way:</p><p>$$
+\alpha = a_0 + a_1 i + a_2 j + a_3 k, \quad a_i \in \QQ.
+$$</p><p>However, we will be working with integral, cyclic ideals $I$ with left order $\OO_0$, and we
+will be evaluating either basis elements of $\OO_0$ or the action of generators of the ideal
+$I = \OO_0\langle \alpha, D \rangle$. For these cases, our elements can always be written as:</p><p>$$
+\alpha = \frac{a_0 + a_1 i + a_2 j + a_3 k}{d}, \quad a_i \in \ZZ, \quad d \in \{1, 2\}.
+$$</p><p>We can then compute the isomorphism $\xi : (1, i, j, k) \mapsto ([1], \iota, \pi, \iota \circ \pi)$,
+allowing us to express the endomorphism $\theta_\alpha = \xi^{-1}(\alpha) \in \End(E_0)$:</p><p>$$
+[d] \circ \theta_\alpha = [a_0] + [a_1] \circ \iota + [a_2] \circ \pi + [a_3] \circ \iota \circ \pi ,
+$$</p><p>where $[m]$ denotes the endomorphism of scalar multiplication by $m$.</p><p>When $d = 1$, we can simply evaluate the right-hand side to obtain the action of $\theta_\alpha$
+on some point $P \in E_0$.
+For the case of $d = 2$, we must first compute some $Q$ such that $P= [2]Q$ such that
+$\theta_\alpha(P) = [2] \circ \theta_\alpha (Q)$.</p><p>SageMath allows us to easily compute all $Q$ such that $P = [2]Q$ with the function <code>P.division_points(2)</code>.
+We only need one such point, so we can simply compute <code>Q = P.division_points(2)[0]</code>.</p><p><strong>Note</strong>: for SQISign, it is important that we can compute such a $Q$ without needing to
+perform a field extension to allow the division. This requires that $P$ cannot have maximal
+even torsion.
+Understanding this is particularly important when we are taking
+step sizes in <code>IdealToIsogenyFromKLPT()</code> by computing isogenies from ideals of norm $2^\text{step}$.
+The fact we may need to divide by two during this conversion
+means that if the maximal available torsion is $2^f$, then we are restricted to pick
+$\text{step} \leq f - 1$.</p><h3 id=putting-this-all-together>Putting this all together</h3><p>With all the above discussion, we have a fairly friendly looking implementation of evaluating
+the action of $\xi^{-1}(\alpha)$ on a point $P$ of order $D$:</p><div class=highlight><pre tabindex=0 style=color:#ebdbb2;background-color:#282828;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=display:flex><span><span style=color:#fe8019>def</span> <span style=color:#fabd2f>eval_endomorphism</span>(α, P, D):
+</span></span><span style=display:flex><span>    <span style=color:#b8bb26>&#34;&#34;&#34;
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    Evaluates the action of an endomorphism
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    f ∈ End(E0) on a point P ∈ E.
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    &#34;&#34;&#34;</span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Basis for the endomorphisms, functions as above</span>
+</span></span><span style=display:flex><span>    EndE0 <span style=color:#fe8019>=</span> [E01, E0ι, E0π, E0ιπ]
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Unpack the coefficients of the generator α such that </span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># α = (w + x*i + y*j + z*k) / d for d,w,x,y,z in ZZ</span>
+</span></span><span style=display:flex><span>    d, <span style=color:#fe8019>*</span>α_coeffs <span style=color:#fe8019>=</span> α<span style=color:#fe8019>.</span>denominator_and_integer_coefficient_tuple()
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># For generators of integral ideals, we expect the denominator </span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># to be at most 2</span>
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>assert</span> d <span style=color:#fe8019>in</span> (<span style=color:#d3869b>1</span>, <span style=color:#d3869b>2</span>), <span style=color:#b8bb26>&#34;Something is wrong with the input ideal&#34;</span>
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>if</span> d <span style=color:#fe8019>==</span> <span style=color:#d3869b>2</span>:
+</span></span><span style=display:flex><span>        <span style=color:#928374;font-style:italic># Divide out by two before evaluation if needed</span>
+</span></span><span style=display:flex><span>        P <span style=color:#fe8019>=</span> P<span style=color:#fe8019>.</span>division_points(d)[<span style=color:#d3869b>0</span>]
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Compute the image of α(P)</span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># α(P) = [α0] * P + [α1] * ι(P) + [α2] * π(P) + [α3] * ι(π(P))</span>
+</span></span><span style=display:flex><span>    αP <span style=color:#fe8019>=</span> <span style=color:#fabd2f>sum</span>(ai <span style=color:#fe8019>*</span> θ(P) <span style=color:#fe8019>for</span> ai, θ <span style=color:#fe8019>in</span> <span style=color:#fabd2f>zip</span>(α_coeffs, EndE0))
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>return</span> αP
+</span></span></code></pre></div><h3 id=pick-a-curve>Pick a curve</h3><p>Technically, we can work with any curve $E$ providing that we know
+the connecting isogeny $\phi : E_0 \to E$, and in our implementation
+<a href=https://github.com/LearningToSQI/SQISign-SageMath/blob/main/deuring.py><code>deuring.py</code></a>, we have allowed for this with an optional parameter
+<code>connecting_isogenies</code> which is the tuple $(\phi, \widehat\phi)$. However,
+in SQISign, everything is mapped back to $E_0$ or $\OO_0$ before converting,
+so to allow for a clearer discussion we have simply assumed that our ideals
+$I$ have left order $\OO_0$ and our kernel generators are points $P \in E_0$.</p><p>Essentially, the trick for working with generic curves is to take $P \in E$
+and compute the image $\widehat\phi(P) \in E_0$ to use in the above function.
+Then, after we find $P_\alpha = \theta_\alpha \circ \widehat\phi(P) \in E_0$, we
+return $\phi(P_\alpha) \in E$.</p><p><strong>Note</strong>: The composition $\phi \circ \widehat\phi = [D]$ where
+$D = \deg(\phi)$. So in the above, we have computed:</p><p>$$
+[D] \circ \xi^{-1}(\alpha) = \phi \circ \theta_\alpha \circ \widehat\phi,
+$$</p><p>So, to recover the true action of $\xi^{-1}(\alpha)(P)$, we must divide by $[D]$.</p><h2 id=computing-the-kernels-from-ideals>Computing the kernels from ideals</h2><p>With the ability to evaluate $\xi^{-1}(\alpha)(P)$ on a point $P \in E_0$, obtaining
+a kernel generator from an ideal is now straightforward. For the ease of notation, we
+will write $\alpha(P)$ as the action of some $\alpha \in \BB$ on a point $P \in E_0$,
+dropping the explicit mention of the isomorphism $\xi$.</p><p>For an ideal $I$, let us denote the $I$-torsion subgroup</p><p>$$
+E[I] = \{ P \in E \mathrel{|} \alpha(P) = 0 \;\; \forall \alpha \in I \} ,
+$$</p><p>which should be understood as the kernel $E_0[I] = \ker(\phi_I)$ for the isogeny
+$\phi_I : E_0 \to E_0 / \langle I \rangle$. For an ideal of norm $D$, the group $E_0[I]$ will have
+order $D$.</p><p>We will only be considering cyclic ideals as these correspond to cyclic isogenies.
+For clarification, see the page <a href=/posts/cyclic-ideals>Working with Cyclic Ideals</a>.
+When $I$ is a cyclic ideal, we have that
+$E_0[I]$ is a cyclic group and there is some generator point $K \in E_0[D]$
+such that $E_0[I] = \langle K \rangle $.</p><p>Additionally, for any cyclic ideal with left order $\OO_0$, we can always find an
+element $\alpha \in I$ with reduced norm $\gcd(\Nrd(\alpha), D^2) = D$.
+We call this element the <em>generator</em> of the ideal, and we write:</p><p>$$
+I = \OO_0\langle \alpha, D \rangle = \OO_0 \alpha + \OO_0 D.
+$$</p><p>Given the generator $\alpha$, we can then recover $E_0[I] = E_0[\alpha] \cap E_0[D]$
+by first computing the torsion basis $E_0[D] = \langle P, Q \rangle$ and then computing the kernel generator $K = [a]P + [b]Q \in E_0[D]$.</p><p>This is achieved by solving for $a,b$ such that the action of $\alpha(K)$
+gives the identity point on $E_0$.
+We can efficiently solve this by exploiting the fact that $\xi^{-1} (\alpha)$ is an endomorphism, and
+hence a group homomorphism, to reduce the problem to finding $a,b$ such that $[a]\alpha(P) = -[b]\alpha(Q)$. We do this by
+solving a discrete logarithm problem, which is efficient as our points all have smooth order.</p><h3 id=prime-power-norms>Prime power norms</h3><p>When $D$ is a prime power, we have that at least one of $\alpha(P)$ or $\alpha(Q)$
+will have order $D$. Without loss of generality, assume $\alpha(Q)$ has order $D$.
+We can then use $\alpha(Q)$ as the base point for solving the discrete log and find
+the integer $a$ such that $\alpha(P) = [a] \alpha(Q)$. The kernel generator
+$K = P - [a]Q$ can then be returned.</p><p>We can solve this in SageMath with the following snippet:</p><div class=highlight><pre tabindex=0 style=color:#ebdbb2;background-color:#282828;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=display:flex><span>αP, αQ <span style=color:#fe8019>=</span> [eval_endomorphism(α, X, D) <span style=color:#fe8019>for</span> X <span style=color:#fe8019>in</span> (P, Q)]
+</span></span><span style=display:flex><span><span style=color:#fe8019>if</span> <span style=color:#fe8019>not</span> has_order_D(αQ, D):
+</span></span><span style=display:flex><span>    αP, αQ <span style=color:#fe8019>=</span> αQ, αP
+</span></span><span style=display:flex><span>    P, Q <span style=color:#fe8019>=</span> Q, P
+</span></span><span style=display:flex><span>a <span style=color:#fe8019>=</span> αQ<span style=color:#fe8019>.</span>discrete_log(αP)
+</span></span><span style=display:flex><span><span style=color:#fe8019>assert</span> αP <span style=color:#fe8019>==</span> a<span style=color:#fe8019>*</span>αQ
+</span></span><span style=display:flex><span><span style=color:#fe8019>return</span> P <span style=color:#fe8019>-</span> a<span style=color:#fe8019>*</span>Q
+</span></span></code></pre></div><h3 id=allowing-d-to-be-composite>Allowing $D$ to be composite</h3><p>Although working with prime powers allows an easier discussion, by allowing composite $D$
+we can perform this algorithm only once, rather than for all primes factoring $D$.
+However, to do this, we must first slightly modify
+the discrete logarithm steps.</p><p>For generic $D$, we might have that neither
+$\alpha(P)$ nor $\alpha(Q)$ have order $D$, so we cannot solve the discrete logarithm
+as above to recover $a$.
+Instead, we compute $\alpha(P), \alpha(Q)$ as before and write them in linear combinations
+of the torsion basis $E_0[D]$:
+$$
+\alpha(P) = [a_1] P + [b_1] Q, \qquad \alpha(Q) = [a_2] P + [b_2] Q.
+$$
+The integers $a_i, b_i$ can be efficiently recovered by solving two bi-dimensional
+discrete logarithm problem. In out implementation, this is the function <code>BiDLP(R, P, Q, D)</code>
+in the <a href=https://github.com/LearningToSQI/SQISign-SageMath/blob/main/utilities.py><code>utilities.py</code></a> file.</p><p>Given the integers $a_i, b_i$, we can recover $E_0[I]$ by first computing the kernel basis
+of the matrix:</p><p>$$
+\mathbf{A} =
+\begin{bmatrix}
+a_1 & b_1 \\
+a_2 & b_2
+\end{bmatrix} \in \mathbb{M}_2(\mathbb{Z} / D \mathbb{Z}), \qquad
+\ker(\mathbf{A}) =
+\begin{bmatrix}
+u_1 & v_1 \\
+u_2 & v_2
+\end{bmatrix}
+$$</p><p>and from this, we recover</p><p>$$
+E_0[I] = \langle [u_1] P + [v_1] Q, [u_2] P + [v_2] Q\rangle.
+$$</p><p>We can perform this computation in SageMath with the following snippet:</p><div class=highlight><pre tabindex=0 style=color:#ebdbb2;background-color:#282828;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=display:flex><span><span style=color:#928374;font-style:italic># Evaluate α(P) and α(Q)</span>
+</span></span><span style=display:flex><span>R, S <span style=color:#fe8019>=</span> [EvalEndomorphism(α, X) <span style=color:#fe8019>for</span> X <span style=color:#fe8019>in</span> (P,Q)]
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#928374;font-style:italic># Find x,y such that R = xP + yQ</span>
+</span></span><span style=display:flex><span>Rx, Ry <span style=color:#fe8019>=</span> BiDLP(D, R, P, Q)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#928374;font-style:italic># Find x,y such that R = xP + yQ</span>
+</span></span><span style=display:flex><span>Sx, Sy <span style=color:#fe8019>=</span> BiDLP(D, S, P, Q)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#928374;font-style:italic># matrix of α on D-torsion w.r.t. basis (P,Q)</span>
+</span></span><span style=display:flex><span>mat <span style=color:#fe8019>=</span> matrix([(Rx, Ry), (Sx, Sy)])
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#928374;font-style:italic># Thanks to Lorenz Panny for the following Sage</span>
+</span></span><span style=display:flex><span><span style=color:#928374;font-style:italic># Hack to find kernel of a matrix over ZZ/DZZ</span>
+</span></span><span style=display:flex><span><span style=color:#928374;font-style:italic># See: https://trac.sagemath.org/ticket/34862</span>
+</span></span><span style=display:flex><span>ker <span style=color:#fe8019>=</span> mat<span style=color:#fe8019>.</span>stack(D<span style=color:#fe8019>*</span>identity_matrix(<span style=color:#d3869b>2</span>))<span style=color:#fe8019>.</span>left_kernel()<span style=color:#fe8019>.</span>basis_matrix()[:,:<span style=color:#d3869b>2</span>]<span style=color:#fe8019>.</span>change_ring(Zmod(D))
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#fe8019>return</span> [u<span style=color:#fe8019>*</span>P <span style=color:#fe8019>+</span> v<span style=color:#fe8019>*</span>Q <span style=color:#fe8019>for</span> u,v <span style=color:#fe8019>in</span> ker <span style=color:#fe8019>if</span> u <span style=color:#fe8019>or</span> v]
+</span></span></code></pre></div><p>For our implementation, we want to not just have the kernel
+$E_0[I] = \langle K_1, K_2\rangle$ but rather a single generating point $K$.
+Although there are deterministic ways to solve for this, it seems to require computing
+the order of both $K_1$ and $K_2$, which for large characteristic can be slow.</p><p>Instead, we find that a fairly sensible method is to just try linear combinations of $K_i$ until
+a point of order $D$ is found.</p><p>If we have that either $K_1$ or $K_2$ has order exactly $D$, we can return this as our kernel generator
+immediately. In the case where neither has full order, we can construct $K = K_1 + [x] K_2$ and see whether
+this has full order. Checking if an element has order exactly $D$ is about ten times faster than computing
+its order, so this check is almost always faster.</p><p>We implemented this as a small function, which we copy below:</p><div class=highlight><pre tabindex=0 style=color:#ebdbb2;background-color:#282828;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=display:flex><span><span style=color:#fe8019>def</span> <span style=color:#fabd2f>derive_cyclic_generator</span>(P, Q, D):
+</span></span><span style=display:flex><span>    <span style=color:#b8bb26>&#34;&#34;&#34;
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    Given generators &lt;P,Q&gt; of a cyclic group
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    of order D, find K such that G = &lt;K&gt;
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    Heuristically, it seems easy to randomly
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    find a K this way, and is about 10x faster
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    than the deterministic method as we do not
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    need to compute the order of P or Q.
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    &#34;&#34;&#34;</span>
+</span></span><span style=display:flex><span>    K <span style=color:#fe8019>=</span> P <span style=color:#fe8019>+</span> Q
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>for</span> _ <span style=color:#fe8019>in</span> <span style=color:#fabd2f>range</span>(<span style=color:#d3869b>1000</span>):
+</span></span><span style=display:flex><span>        <span style=color:#fe8019>if</span> has_order_D(K, D):
+</span></span><span style=display:flex><span>            <span style=color:#fe8019>return</span> K
+</span></span><span style=display:flex><span>        K <span style=color:#fe8019>+=</span> Q
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>raise</span> <span style=color:#fb4934>ValueError</span>(<span style=color:#b8bb26>f</span><span style=color:#b8bb26>&#34;Never found a cyclic generator!&#34;</span>)
+</span></span></code></pre></div><p>We acknowledge there may be a significantly better way to do this, but this works for now.</p><h3 id=avoiding-discrete-logs>Avoiding discrete logs</h3><p>The description above is how our code was implemented while developing this project. However, there was a recent publication:
+<a href=https://ia.cr/2023/106>Deuring for the People: Supersingular Elliptic Curves with Prescribed Endomorphism Ring in General Characteristic</a>
+by Jonathan Komada Eriksen, Lorenz Panny, Jana Sotáková, and Mattia Veroni, which had some tricks to remove the discrete logarithms.</p><p>The authors noticed that instead of computing the action of $\alpha$ on the generators of $E_0[D] = \langle P, Q \rangle$
+and then solving a discrete logarithm to recover the kernel, one could directly recover
+$E_0[I] = \langle \bar\alpha(P), \bar\alpha(Q) \rangle$
+by computing the action of the <em>conjugate</em> of the generator.
+For more details, please see Section 4.1 of the above reference.</p><p>We now have a very simply algorithm for composite $D$. Given an ideal $I$ of norm $D$:</p><ul><li>Compute the generator of the ideal $\alpha$ and take the conjugate $\bar\alpha$</li><li>Compute the torsion basis $E_0[D] = \langle P, Q \rangle$.</li><li>Evaluate the action of $\bar\alpha$ on this basis to obtain $\langle \bar\alpha(P), \bar\alpha(Q) \rangle$.</li><li>(Optionally) take a linear combination of $\langle \bar\alpha(P), \bar\alpha(Q) \rangle$ to find a point $K$ of order $D$.</li></ul><h3 id=putting-it-all-together>Putting it all together</h3><p>Putting everything together, we get the following clean implementation</p><div class=highlight><pre tabindex=0 style=color:#ebdbb2;background-color:#282828;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-py data-lang=py><span style=display:flex><span><span style=color:#fe8019>def</span> <span style=color:#fabd2f>ideal_to_kernel</span>(E, I):
+</span></span><span style=display:flex><span>    <span style=color:#b8bb26>&#34;&#34;&#34;
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    Given a supersingular elliptic curve E0
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    and a cyclic ideal I with left order O0 
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    produces a generator K_I ∈ E[n(I)] such that
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    ker(ϕ) = ⟨K_I⟩ = ⟨α_bar(P), α_bar(Q)⟩
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    &#34;&#34;&#34;</span>
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>assert</span> is_cyclic(I), <span style=color:#b8bb26>&#34;Input ideal is not cyclic&#34;</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Degree of the isogeny we will to compute</span>
+</span></span><span style=display:flex><span>    D <span style=color:#fe8019>=</span> ZZ(I<span style=color:#fe8019>.</span>norm())
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Compute a generator such that I = O&lt;α, D&gt;</span>
+</span></span><span style=display:flex><span>    α <span style=color:#fe8019>=</span> ideal_generator(I)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Compute the torsion basis of E[D]</span>
+</span></span><span style=display:flex><span>    P, Q <span style=color:#fe8019>=</span> torsion_basis(E, D)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Evaluate R = α_bar(P)</span>
+</span></span><span style=display:flex><span>    α_bar <span style=color:#fe8019>=</span> α<span style=color:#fe8019>.</span>conjugate()
+</span></span><span style=display:flex><span>    R <span style=color:#fe8019>=</span> eval_endomorphism(α_bar, P, D)
+</span></span><span style=display:flex><span>    
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># If this has full order, we can stop here</span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># as R = α_bar(P) generates the kernel</span>
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>if</span> has_order_D(R, D):
+</span></span><span style=display:flex><span>        <span style=color:#fe8019>return</span> R
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Same again for S = α_bar(Q)</span>
+</span></span><span style=display:flex><span>    S <span style=color:#fe8019>=</span> eval_endomorphism(α_bar, Q, D)
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>if</span> has_order_D(S, D):
+</span></span><span style=display:flex><span>        <span style=color:#fe8019>return</span> S
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Neither R or S had full order, so we to find a</span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># linear combination of R, S which has order D</span>
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>return</span> derive_cyclic_generator(R, S, D)
+</span></span></code></pre></div><h2 id=computing-ideals-from-kernels>Computing ideals from kernels</h2><p>Unlike <code>ideal_to_kernel()</code>, which is used throughout SQISign, converting from
+a kernel generator to an ideal is only performed during the commitment stage.
+In this final section, we
+overview how this algorithm is implemented. We follow
+<a href=https://www.lix.polytechnique.fr/Labo/Antonin.LEROUX/manuscrit_these.pdf>Leroux&rsquo;s Thesis: Algorithm 20</a>
+without modification, so the summary is shorter than the section above.</p><p>We know some point $K \in E[D]$ which generates the kernel of a
+cyclic isogeny $\phi$ of degree $D$, and we wish to compute a generator $\alpha$
+such that $I_\phi = \OO \alpha + \OO D$ for $\OO \cong \End(E)$.</p><p>To do this, we start with a basis for $\OO$ which we denote
+$\langle \beta_0, \beta_1, \beta_2, \beta_3 \rangle$,
+and we know that our generator can be written as some integral linear
+combination of the basis:
+$\alpha = a_0 \beta_0 + a_1 \beta_1 + a_2 \beta_2 + a_3 \beta_3$ for
+$a_i \in \ZZ$.</p><p>As $\ker(\phi) = \langle K \rangle$, if $\alpha$ the generator of the ideal $I_\phi$,
+we must have that $\alpha(K)$ is the identity point on $E$. This is what allows us to
+determine the coefficients $a_i$.
+Using our isomorphism $\xi$, we map the basis for $\OO$ to a basis of $\End(E)$ such that
+$\xi(\beta_i) = \theta_i$. We then map the above $\alpha$ to some $\theta \in \End(E)$:</p><p>$$
+\theta = [a_0] \theta_0 + [a_1] \theta_1 + [a_2] \theta_2 + [a_3] \theta_3.
+$$
+Then, we look for $a_i$ such that $\theta(K)$ is the identity point on $E$.</p><p>The method described in Algorithm 20 is to find two basis elements
+$\theta_i$ and $\theta_j$ which through their action on $K$ generate the torsion basis, i.e.,
+$E[D] = \langle \theta_i(K), \theta_j(K) \rangle$.</p><p>Given this basis, we can compute any point $P \in E[D]$ as a linear combination of
+$\theta_i(K)$ and $\theta_j(K)$. In particular, for some $\theta_k$ not equal to $\theta_i$
+or $\theta_j$, we can represent the point $\theta_k(K) = [a] \theta_i(K) + [b] \theta_j(K)$
+by solving the bi-dimensional discrete logarithm problem.</p><p>As we have $\theta_k(K) = [a] \theta_i(K) + [b] \theta_j(K)$, we have derived an endomorphism</p><p>$$
+\theta = \theta_k - [a] \theta_i - [b] \theta_j,
+$$</p><p>which maps $K$ to the identity point on $E$. This is precisely what we
+were looking for, and we can finish our algorithm by computing</p><p>$$
+\alpha = \beta_k - a \beta_i - b \beta_j, \quad I_\phi = \OO\langle \alpha, D \rangle.
+$$</p><h3 id=putting-it-all-together-1>Putting it all together</h3><p>Putting this together into one function, we have the following implementation:</p><div class=highlight><pre tabindex=0 style=color:#ebdbb2;background-color:#282828;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-py data-lang=py><span style=display:flex><span><span style=color:#fe8019>def</span> <span style=color:#fabd2f>kernel_to_ideal</span>(P, D):
+</span></span><span style=display:flex><span>    <span style=color:#b8bb26>&#34;&#34;&#34;
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    Given a point P ∈ E[D] compute the
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    ideal I(&lt;P&gt;))
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    &#34;&#34;&#34;</span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Compute a basis β1,β2,β3,β4 of O0</span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># with norm coprime to D</span>
+</span></span><span style=display:flex><span>    βs <span style=color:#fe8019>=</span> compute_coprime_basis(D)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Compute the image of all the points</span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># β(P) by acting with θ ≅ β</span>
+</span></span><span style=display:flex><span>    θs <span style=color:#fe8019>=</span> [eval_endomorphism(β, P, D) <span style=color:#fe8019>for</span> β <span style=color:#fe8019>in</span> βs]
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Find θi, θj which generates E[D]</span>
+</span></span><span style=display:flex><span>    i, j <span style=color:#fe8019>=</span> find_torsion_basis_EndE(θs, D)
+</span></span><span style=display:flex><span>    θi, θj <span style=color:#fe8019>=</span> θs[i], θs[j]
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Pick k ≠ i,j such that</span>
+</span></span><span style=display:flex><span>    k <span style=color:#fe8019>=</span> <span style=color:#fabd2f>set</span>([<span style=color:#d3869b>0</span>, <span style=color:#d3869b>1</span>, <span style=color:#d3869b>2</span>, <span style=color:#d3869b>3</span>])<span style=color:#fe8019>.</span>difference([i, j])<span style=color:#fe8019>.</span>pop()
+</span></span><span style=display:flex><span>    θk <span style=color:#fe8019>=</span> θs[k]
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Solve the discrete log</span>
+</span></span><span style=display:flex><span>    a, b <span style=color:#fe8019>=</span> BiDLP(θk, θi, θj, D)
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>assert</span> a <span style=color:#fe8019>*</span> θi <span style=color:#fe8019>+</span> b <span style=color:#fe8019>*</span> θj <span style=color:#fe8019>==</span> θk
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#928374;font-style:italic># Create the Quaternion Algebra element</span>
+</span></span><span style=display:flex><span>    α <span style=color:#fe8019>=</span> βs[k] <span style=color:#fe8019>-</span> a <span style=color:#fe8019>*</span> βs[i] <span style=color:#fe8019>-</span> b <span style=color:#fe8019>*</span> βs[j]
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>return</span> O0 <span style=color:#fe8019>*</span> α <span style=color:#fe8019>+</span> O0 <span style=color:#fe8019>*</span> D
+</span></span></code></pre></div><h3 id=finding-the-torsion-basis>Finding the torsion basis</h3><p>To find $E[D] = \langle \theta_i(K), \theta_j(K) \rangle$ it is enough to just
+check all pairs $\theta_i(K)$, $\theta_j(K)$ by computing the Weil pairing
+$e(\theta_i(K), \theta_j(K))$. If the multiplicative order of this element
+is $D$, then $\theta_i(K)$, $\theta_j(K)$ must be linearly independent.</p><div class=highlight><pre tabindex=0 style=color:#ebdbb2;background-color:#282828;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-py data-lang=py><span style=display:flex><span><span style=color:#fe8019>def</span> <span style=color:#fabd2f>find_torsion_basis_EndE</span>(θPs, D):
+</span></span><span style=display:flex><span>    <span style=color:#b8bb26>&#34;&#34;&#34;
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    Looks for θi, θj such that θi(P), θj(P) generates E[D]
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    &#34;&#34;&#34;</span>
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>for</span> i <span style=color:#fe8019>in</span> <span style=color:#fabd2f>range</span>(<span style=color:#d3869b>4</span>):
+</span></span><span style=display:flex><span>        <span style=color:#fe8019>for</span> j <span style=color:#fe8019>in</span> <span style=color:#fabd2f>range</span>(i <span style=color:#fe8019>+</span> <span style=color:#d3869b>1</span>, <span style=color:#d3869b>4</span>):
+</span></span><span style=display:flex><span>            eθiθj <span style=color:#fe8019>=</span> θPs[i]<span style=color:#fe8019>.</span>weil_pairing(θPs[j], D, algorithm<span style=color:#fe8019>=</span><span style=color:#b8bb26>&#34;pari&#34;</span>)
+</span></span><span style=display:flex><span>            <span style=color:#fe8019>if</span> has_order_D(eθiθj, D, multiplicative<span style=color:#fe8019>=</span><span style=color:#fe8019>True</span>):
+</span></span><span style=display:flex><span>                <span style=color:#fe8019>return</span> i, j
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>raise</span> <span style=color:#fb4934>ValueError</span>(<span style=color:#b8bb26>f</span><span style=color:#b8bb26>&#34;No basis for E[D] found with given point&#34;</span>)
+</span></span></code></pre></div><h3 id=computing-a-good-basis>Computing a good basis</h3><p>Another thing we must be careful of is making sure we compute a basis for $\OO$
+such that the reduced norm of all the basis elements are coprime to $D$.
+This is done to ensure that we find the correct generator $\alpha$ and not something
+which only corresponds to some subgroup of the kernel.</p><p>Currently, we find a <em>good</em> basis with the following (fairly hacky) function:</p><div class=highlight><pre tabindex=0 style=color:#ebdbb2;background-color:#282828;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-py data-lang=py><span style=display:flex><span><span style=color:#fe8019>def</span> <span style=color:#fabd2f>compute_coprime_basis</span>(D):
+</span></span><span style=display:flex><span>    <span style=color:#b8bb26>&#34;&#34;&#34;
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    Start with basis &lt;1, i, (i + j) / 2, (1 + k) / 2&gt;
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    and find a new basis such that the norm of each basis
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    element is coprime to `D`.
+</span></span></span><span style=display:flex><span><span style=color:#b8bb26>    &#34;&#34;&#34;</span>
+</span></span><span style=display:flex><span>    O0_basis <span style=color:#fe8019>=</span> O0<span style=color:#fe8019>.</span>basis()
+</span></span><span style=display:flex><span>    θs <span style=color:#fe8019>=</span> []
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>for</span> f <span style=color:#fe8019>in</span> O0_basis:
+</span></span><span style=display:flex><span>        <span style=color:#fe8019>while</span> <span style=color:#fe8019>True</span>:
+</span></span><span style=display:flex><span>            <span style=color:#fe8019>if</span> gcd(f<span style=color:#fe8019>.</span>reduced_norm(), D) <span style=color:#fe8019>==</span> <span style=color:#d3869b>1</span>:
+</span></span><span style=display:flex><span>                θs<span style=color:#fe8019>.</span>append(f)
+</span></span><span style=display:flex><span>                <span style=color:#fe8019>break</span>
+</span></span><span style=display:flex><span>            f <span style=color:#fe8019>+=</span> O0_basis[<span style=color:#d3869b>0</span>] <span style=color:#fe8019>+</span> O0_basis[<span style=color:#d3869b>1</span>]
+</span></span><span style=display:flex><span>    <span style=color:#fe8019>return</span> θs
+</span></span></code></pre></div><p>Potentially there is much nicer solution than this. If you have a suggestion,
+please let us know! For now, this is working, so hopefully that is good enough.</p><p><a href=#top>Back to Top</a></p></article></div><div class=flex-menu><div class=menu-header-mobile>Contents</div><div class=page-list><div class=menu-header>Contents</div><div class=contents><a href=/>Introduction</a></div><div class=contents><a href=/posts/overview/>Overview</a></div><div class=contents><a href=/posts/cyclic-ideals/>Working with Cyclic Ideals</a></div><div class=contents><a href=/posts/up-to-iso/>Correct up to Isomorphism</a></div><div class=contents><a href=/posts/pushforwards/>Pushforwards and Pullbacks</a></div><div class=contents><a href=/posts/klpt-bounds/>Estimating Bounds for KLPT</a></div><div class=contents><a href=/posts/prime-ideal/>Equivalent Prime Norm Ideals</a></div><div class=contents><a href=/posts/strong-approximation-lattice/>Strong Approximation Lattice Trick</a></div><div class=contents><a href=/posts/ideal-kernel/>Between Kernels and Ideals</a></div><div class=contents><a href=/posts/ideal-to-isogeny/>Computing Isogenies from Ideals</a></div><div class=contents><a href=/posts/ideal-to-isogeny-subroutines/>Subroutines when Computing Isogenies from Ideals</a></div><div class=contents><a href=/posts/meet-in-the-middle/>Meet in the Middle Isogenies</a></div><div class=contents><a href=/posts/small-steps/>Small Steps from Curves with Small Endomorphisms</a></div><div class=contents><a href=/posts/compression/>Modifying Compression</a></div><div class=contents><a href=/posts/future-work/>Future Work</a></div></div></div></div></main></div></body><footer><div class=footer-left><div class=footer-title>Learning to SQI<br><em>Implementing SQISign in SageMath</em></div><div class=footer-authors>Maria Corte-Real Santos,
+Giacomo Pope</div></div><div class=footer-right><a href=https://github.com/jack4818/SQISign-SageMath><img class=social-link alt=GitHub src=/images/github.svg></a></div></footer></html>
