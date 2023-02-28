@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="{{ $.Site.LanguageCode }}">
+    {{- partial "head.html" . -}}
+    <body a="{{ $.Site.Params.theme_config.appearance | default "auto" }}">
+
+        <div class="wrapper">
+
+            {{- partial "header.html" . -}}
+
+            <main class="page-content" aria-label="Content">
+                <div class="flex-wrapper">
+                    <div class="flex-content">
+                        {{- block "main" . }}{{- end }}
+                    </div>
+
+                    <div class="flex-menu">
+                        <div class="menu-header-mobile">Contents</div>
+                        <div class="page-list">
+                            {{ partial "post_list.html" }}
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+        </div>
+
+    </body>
+    {{- partial "footer.html" . -}}
+
+</html>
