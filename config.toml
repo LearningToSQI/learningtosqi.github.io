@@ -11,7 +11,7 @@ theme = 'cleanmaths'
 
   [[params.social]]
       title = "GitHub"
-      link = "https://github.com/jack4818/SQISign-SageMath"
+      link = "https://github.com/LearningToSQI/SQISign-SageMath"
       icon = "/images/github.svg"
 
 [markup]
